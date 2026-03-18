@@ -1,11 +1,18 @@
+import json
 import time
+import uuid
+from collections.abc import AsyncIterator
 
+import structlog
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 
 from app.models.schemas import ReviewRequest, ReviewResult
-from app.parsers.tree_sitter_parser import parse_code
+from app.models.enums import Language
 from app.parsers.languages import supported_languages
+from app.agents.graph import review_graph
 
+logger = structlog.get_logger()
 router = APIRouter()
 
 
@@ -21,16 +28,95 @@ async def health() -> dict[str, object]:
 @router.post("/review", response_model=ReviewResult)
 async def create_review(request: ReviewRequest) -> ReviewResult:
     start = time.perf_counter()
+    review_id = str(uuid.uuid4())
 
-    structure = parse_code(request.code, request.language)
+    initial_state = {
+        "code": request.code,
+        "language": request.language.value,
+        "ast_summary": "",
+        "metrics": None,
+        "findings": [],
+        "agent_outputs": [],
+        "overall_score": 100,
+        "summary": "",
+    }
 
+    result = await review_graph.ainvoke(initial_state)
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     return ReviewResult(
-        metrics=structure.metrics,
-        findings=[],
-        overall_score=100,
-        summary="Parsing complete. Agent analysis not yet available.",
+        id=review_id,
+        metrics=result["metrics"],
+        findings=result["findings"],
+        overall_score=result["overall_score"],
+        summary=result["summary"],
+        agent_outputs=result.get("agent_outputs", []),
         language=request.language,
         total_time_ms=round(elapsed_ms, 2),
+    )
+
+
+@router.post("/review/stream")
+async def stream_review(request: ReviewRequest) -> StreamingResponse:
+    review_id = str(uuid.uuid4())
+
+    async def event_stream() -> AsyncIterator[str]:
+        initial_state = {
+            "code": request.code,
+            "language": request.language.value,
+            "ast_summary": "",
+            "metrics": None,
+            "findings": [],
+            "agent_outputs": [],
+            "overall_score": 100,
+            "summary": "",
+        }
+
+        start = time.perf_counter()
+
+        async for event in review_graph.astream_events(initial_state, version="v2"):
+            kind = event.get("event", "")
+            name = event.get("name", "")
+
+            if kind == "on_chain_start" and name in ("quality_agent", "security_agent", "docs_agent"):
+                sse_data = json.dumps({"type": "agent_start", "agent": name})
+                yield f"data: {sse_data}\n\n"
+
+            elif kind == "on_chain_end" and name in ("quality_agent", "security_agent", "docs_agent"):
+                output = event.get("data", {}).get("output", {})
+                findings = output.get("findings", [])
+                for finding in findings:
+                    finding_data = finding.model_dump() if hasattr(finding, "model_dump") else finding
+                    sse_data = json.dumps({"type": "finding", "agent": name, "data": finding_data})
+                    yield f"data: {sse_data}\n\n"
+
+                sse_data = json.dumps({
+                    "type": "agent_complete",
+                    "agent": name,
+                    "findings_count": len(findings),
+                })
+                yield f"data: {sse_data}\n\n"
+
+            elif kind == "on_chain_end" and name == "synthesize":
+                output = event.get("data", {}).get("output", {})
+                elapsed_ms = (time.perf_counter() - start) * 1000
+
+                complete_data = {
+                    "type": "complete",
+                    "review_id": review_id,
+                    "overall_score": output.get("overall_score", 0),
+                    "summary": output.get("summary", ""),
+                    "total_time_ms": round(elapsed_ms, 2),
+                }
+                sse_data = json.dumps(complete_data)
+                yield f"data: {sse_data}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Review-ID": review_id,
+        },
     )
