@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv python install 3.12
+      - run: cd backend && uv venv .venv && uv pip install --system -e ".[dev]"
+      - run: cd backend && ruff check app/ tests/
+      - run: cd backend && ruff format --check app/ tests/
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv python install 3.12
+      - run: cd backend && uv venv .venv && uv pip install --system -e ".[dev]"
+      - run: cd backend && pytest tests/ -v --cov=app --cov-report=term-missing
+        env:
+          ODIN_REDIS_URL: redis://localhost:6379/0
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t odin-backend ./backend
