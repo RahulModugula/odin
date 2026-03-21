@@ -1,0 +1,5 @@
+[
+    {"category": "maintainability", "severity": "high", "title_pattern": "(?i)(complex|cyclomatic|nesting|deeply.nested)"},
+    {"category": "maintainability", "severity": "medium", "title_pattern": "(?i)(too many|parameter|argument)"},
+    {"category": "reliability", "severity": "medium", "title_pattern": "(?i)(bare|broad|silent).*(except|error|catch)"}
+]

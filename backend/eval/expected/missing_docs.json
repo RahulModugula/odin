@@ -1,0 +1,5 @@
+[
+    {"category": "maintainability", "severity": "medium", "title_pattern": "(?i)(missing|lack|no).*(doc|comment|docstring)"},
+    {"category": "maintainability", "severity": "medium", "title_pattern": "(?i)(missing|lack|no).*(doc|comment|docstring)"},
+    {"category": "maintainability", "severity": "low", "title_pattern": "(?i)(missing|lack|no).*(doc|comment|docstring)"}
+]

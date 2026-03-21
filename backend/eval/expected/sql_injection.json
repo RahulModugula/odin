@@ -1,0 +1,4 @@
+[
+    {"category": "security", "severity": "critical", "title_pattern": "(?i)sql.?injection"},
+    {"category": "security", "severity": "critical", "title_pattern": "(?i)sql.?injection"}
+]
