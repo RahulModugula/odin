@@ -38,3 +38,17 @@ services:
       interval: 5s
       timeout: 3s
       retries: 3
+
+  memgraph:
+    image: memgraph/memgraph-platform:latest
+    ports:
+      - "7687:7687"   # Bolt protocol
+      - "7444:7444"   # HTTPS monitoring
+      - "3001:3000"   # Memgraph Lab UI
+    healthcheck:
+      test: ["CMD", "mg_client", "--host", "localhost", "-e", "RETURN 1;"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    profiles:
+      - graphrag

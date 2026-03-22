@@ -45,7 +45,12 @@ async def run_security_agent(
         )
         structured_llm = llm.with_structured_output(SecurityReviewOutput)
 
-        prompt = build_review_prompt(state["code"], state["language"], state["ast_summary"])
+        prompt = build_review_prompt(
+            state["code"],
+            state["language"],
+            state["ast_summary"],
+            state.get("codebase_context", ""),
+        )
         messages = [
             SystemMessage(content=SECURITY_SYSTEM_PROMPT),
             HumanMessage(content=prompt),

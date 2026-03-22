@@ -13,6 +13,8 @@ class ReviewState(TypedDict):
     agent_outputs: Annotated[list[AgentOutput], operator.add]
     overall_score: int
     summary: str
+    codebase_context: str
+    file_path: str | None
 
 
 class AgentInput(TypedDict):
@@ -20,3 +22,4 @@ class AgentInput(TypedDict):
     language: str
     ast_summary: str
     metrics: CodeMetrics
+    codebase_context: str

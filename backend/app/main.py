@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.api.routes import router
 from app.observability.tracing import flush_langfuse
+import app.graph_rag._store_ref as _store_ref
 
 
 logger = structlog.get_logger()
@@ -27,7 +28,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         ),
     )
     logger.info("odin starting up")
+
+    if settings.graph_rag_enabled:
+        from app.graph_rag.store import GraphStore
+
+        auth: tuple[str, str] | None = None
+        if settings.memgraph_auth:
+            user, _, password = settings.memgraph_auth.partition(":")
+            auth = (user, password)
+
+        graph_store = GraphStore(uri=settings.memgraph_uri, auth=auth)
+        await graph_store.connect()
+        _store_ref.store = graph_store
+        app.state.graph_store = graph_store
+
     yield
+
+    if settings.graph_rag_enabled and _store_ref.store is not None:
+        await _store_ref.store.close()
+        _store_ref.store = None
+
     flush_langfuse()
     logger.info("odin shutting down")
 

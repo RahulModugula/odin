@@ -111,7 +111,16 @@ Example findings:
    Suggestion: Add a docstring describing the class purpose and usage."""
 
 
-def build_review_prompt(code: str, language: str, ast_summary: str) -> str:
+def build_review_prompt(
+    code: str,
+    language: str,
+    ast_summary: str,
+    codebase_context: str = "",
+) -> str:
+    context_section = ""
+    if codebase_context.strip():
+        context_section = f"\n\n## Codebase Context\n{codebase_context}"
+
     return f"""Analyze the following {language} code:
 
 ## Code
@@ -120,6 +129,6 @@ def build_review_prompt(code: str, language: str, ast_summary: str) -> str:
 ```
 
 ## AST Analysis
-{ast_summary}
+{ast_summary}{context_section}
 
 Provide your findings as structured output. Each finding must include severity, category, title, description, and optionally line numbers and a suggestion."""

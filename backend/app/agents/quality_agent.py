@@ -45,7 +45,12 @@ async def run_quality_agent(
         )
         structured_llm = llm.with_structured_output(QualityReviewOutput)
 
-        prompt = build_review_prompt(state["code"], state["language"], state["ast_summary"])
+        prompt = build_review_prompt(
+            state["code"],
+            state["language"],
+            state["ast_summary"],
+            state.get("codebase_context", ""),
+        )
         messages = [
             SystemMessage(content=QUALITY_SYSTEM_PROMPT),
             HumanMessage(content=prompt),

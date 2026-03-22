@@ -4,8 +4,9 @@ import uuid
 from collections.abc import AsyncIterator
 
 import structlog
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from app.models.schemas import ReviewRequest, ReviewResult
 from app.models.enums import Language
@@ -40,6 +41,8 @@ async def create_review(request: ReviewRequest) -> ReviewResult:
         "agent_outputs": [],
         "overall_score": 100,
         "summary": "",
+        "codebase_context": "",
+        "file_path": request.filename,
     }
 
     handler = create_langfuse_handler(
@@ -76,6 +79,8 @@ async def stream_review(request: ReviewRequest) -> StreamingResponse:
             "agent_outputs": [],
             "overall_score": 100,
             "summary": "",
+            "codebase_context": "",
+            "file_path": request.filename,
         }
 
         start = time.perf_counter()
@@ -133,3 +138,24 @@ async def stream_review(request: ReviewRequest) -> StreamingResponse:
             "X-Review-ID": review_id,
         },
     )
+
+
+class IndexRequest(BaseModel):
+    code: str
+    language: Language = Language.PYTHON
+    file_path: str
+
+
+@router.post("/index")
+async def index_file(request: IndexRequest) -> dict[str, object]:
+    """Index a file into the knowledge graph for Graph RAG context."""
+    import app.graph_rag._store_ref as _store_ref
+
+    if _store_ref.store is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Graph RAG is not enabled. Set ODIN_GRAPH_RAG_ENABLED=true.",
+        )
+
+    await _store_ref.store.index_file(request.code, request.language, request.file_path)
+    return {"status": "indexed", "file_path": request.file_path}

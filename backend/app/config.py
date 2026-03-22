@@ -16,5 +16,10 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://cloud.langfuse.com"
 
+    # Graph RAG
+    graph_rag_enabled: bool = False
+    memgraph_uri: str = "bolt://localhost:7687"
+    memgraph_auth: str | None = None
+
 
 settings = Settings()
