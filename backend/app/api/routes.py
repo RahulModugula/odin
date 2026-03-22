@@ -11,6 +11,7 @@ from app.models.schemas import ReviewRequest, ReviewResult
 from app.models.enums import Language
 from app.parsers.languages import supported_languages
 from app.agents.graph import review_graph
+from app.observability.tracing import create_langfuse_handler
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -41,7 +42,12 @@ async def create_review(request: ReviewRequest) -> ReviewResult:
         "summary": "",
     }
 
-    result = await review_graph.ainvoke(initial_state)
+    handler = create_langfuse_handler(
+        trace_id=review_id,
+        metadata={"language": request.language.value},
+    )
+    callbacks = [handler] if handler is not None else []
+    result = await review_graph.ainvoke(initial_state, config={"callbacks": callbacks})
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     return ReviewResult(
@@ -74,7 +80,14 @@ async def stream_review(request: ReviewRequest) -> StreamingResponse:
 
         start = time.perf_counter()
 
-        async for event in review_graph.astream_events(initial_state, version="v2"):
+        handler = create_langfuse_handler(
+            trace_id=review_id,
+            metadata={"language": request.language.value, "stream": True},
+        )
+        callbacks = [handler] if handler is not None else []
+        async for event in review_graph.astream_events(
+            initial_state, config={"callbacks": callbacks}, version="v2"
+        ):
             kind = event.get("event", "")
             name = event.get("name", "")
 

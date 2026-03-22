@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.api.routes import router
+from app.observability.tracing import flush_langfuse
 
 
 logger = structlog.get_logger()
@@ -27,6 +28,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     logger.info("odin starting up")
     yield
+    flush_langfuse()
     logger.info("odin shutting down")
 
 

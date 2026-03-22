@@ -3,6 +3,7 @@ import time
 import structlog
 from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
 from app.config import settings
@@ -29,7 +30,10 @@ class QualityReviewOutput(BaseModel):
     findings: list[QualityFinding] = []
 
 
-async def run_quality_agent(state: dict) -> dict:  # type: ignore[type-arg]
+async def run_quality_agent(
+    state: dict,  # type: ignore[type-arg]
+    config: RunnableConfig | None = None,
+) -> dict:  # type: ignore[type-arg]
     start = time.perf_counter()
 
     try:
@@ -47,7 +51,7 @@ async def run_quality_agent(state: dict) -> dict:  # type: ignore[type-arg]
             HumanMessage(content=prompt),
         ]
 
-        result = await structured_llm.ainvoke(messages)
+        result = await structured_llm.ainvoke(messages, config=config)
         findings = [
             Finding(
                 severity=f.severity,
