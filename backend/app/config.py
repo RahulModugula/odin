@@ -21,5 +21,8 @@ class Settings(BaseSettings):
     memgraph_uri: str = "bolt://localhost:7687"
     memgraph_auth: str | None = None
 
+    # MCP server
+    mcp_enabled: bool = True
+
 
 settings = Settings()

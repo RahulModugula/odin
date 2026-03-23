@@ -87,3 +87,12 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 
 app.include_router(router, prefix="/api")
+
+if settings.mcp_enabled:
+    try:
+        from app.mcp.server import mcp
+
+        app.mount("/mcp", mcp.sse_app())
+        logger.info("mcp server mounted at /mcp")
+    except Exception as e:
+        logger.warning("mcp server failed to mount", error=str(e))
