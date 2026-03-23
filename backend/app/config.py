@@ -24,5 +24,9 @@ class Settings(BaseSettings):
     # MCP server
     mcp_enabled: bool = True
 
+    # Deployment
+    environment: str = "development"
+    port: int = 8000
+
 
 settings = Settings()

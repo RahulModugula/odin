@@ -1,0 +1,64 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: odin-backend
+  annotations:
+    run.googleapis.com/ingress: all
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "10"
+        run.googleapis.com/execution-environment: gen2
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 120
+      serviceAccountName: odin-sa@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+        - image: us-central1-docker.pkg.dev/PROJECT_ID/odin/odin-backend:latest
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          resources:
+            limits:
+              cpu: "2"
+              memory: 2Gi
+          env:
+            - name: ODIN_ENVIRONMENT
+              value: production
+            - name: ODIN_LOG_LEVEL
+              value: INFO
+            - name: ODIN_PORT
+              value: "8000"
+            - name: ODIN_REDIS_URL
+              value: redis://10.0.0.3:6379/0  # Memorystore private IP
+            - name: ODIN_MEMGRAPH_URI
+              value: bolt://10.0.0.4:7687     # GCE Memgraph private IP
+            - name: ODIN_ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: odin-anthropic-api-key
+                  key: latest
+            - name: ODIN_LANGFUSE_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: odin-langfuse-public-key
+                  key: latest
+            - name: ODIN_LANGFUSE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: odin-langfuse-secret-key
+                  key: latest
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            periodSeconds: 30
