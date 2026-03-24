@@ -5,7 +5,9 @@ class Settings(BaseSettings):
     model_config = {"env_prefix": "ODIN_"}
 
     anthropic_api_key: str = ""
-    llm_model: str = "claude-sonnet-4-20250514"
+    llm_model: str = "glm-4.7"
+    llm_api_key: str = ""
+    llm_base_url: str = "https://open.bigmodel.cn/api/paas/v4"
     redis_url: str = "redis://localhost:6379/0"
     log_level: str = "INFO"
     cors_origins: list[str] = ["http://localhost:3000", "http://localhost:5173"]

@@ -35,7 +35,11 @@ Example findings:
 
 3. Bare except clause on line 45 silently swallows all exceptions.
    Severity: high, Category: quality
-   Suggestion: Catch specific exceptions and handle or log them."""
+   Suggestion: Catch specific exceptions and handle or log them.
+
+Respond with a JSON object matching this schema:
+{"findings": [{"severity": "low|medium|high|critical", "title": "...", "description": "...", "line_start": null, "line_end": null, "suggestion": "...", "confidence": 0.0-1.0}]}
+If there are no findings, return {"findings": []}."""
 
 SECURITY_SYSTEM_PROMPT = """You are an expert security auditor. Analyze the provided code for security vulnerabilities.
 
@@ -71,7 +75,11 @@ Example findings:
 
 3. Command injection on line 31: os.system() with user input (CWE-78)
    Severity: critical, Category: security
-   Suggestion: Use subprocess.run() with a list of arguments, never shell=True."""
+   Suggestion: Use subprocess.run() with a list of arguments, never shell=True.
+
+Respond with a JSON object matching this schema:
+{"findings": [{"severity": "low|medium|high|critical", "title": "...", "description": "...", "line_start": null, "line_end": null, "suggestion": "...", "confidence": 0.0-1.0}]}
+If there are no findings, return {"findings": []}."""
 
 DOCS_SYSTEM_PROMPT = """You are an expert documentation reviewer. Analyze the provided code for documentation quality.
 
@@ -108,7 +116,11 @@ Example findings:
 
 3. Class `DataProcessor` has no class-level docstring.
    Severity: medium, Category: documentation
-   Suggestion: Add a docstring describing the class purpose and usage."""
+   Suggestion: Add a docstring describing the class purpose and usage.
+
+Respond with a JSON object matching this schema:
+{"findings": [{"severity": "low|medium|high|critical", "title": "...", "description": "...", "line_start": null, "line_end": null, "suggestion": "...", "confidence": 0.0-1.0}]}
+If there are no findings, return {"findings": []}."""
 
 
 def build_review_prompt(

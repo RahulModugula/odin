@@ -1,3 +1,4 @@
+import logging
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -23,7 +24,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
-            structlog.get_level_from_name(settings.log_level)  # type: ignore[operator]
+            logging.getLevelName(settings.log_level.upper())
         ),
     )
     logger.info("odin starting up")

@@ -1,13 +1,12 @@
 import time
 
 import structlog
-from langchain_anthropic import ChatAnthropic
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
+from app.agents.llm import get_llm
 from app.agents.prompts import QUALITY_SYSTEM_PROMPT, build_review_prompt
-from app.config import settings
 from app.models.enums import Category, Severity
 from app.models.schemas import AgentOutput, Finding
 
@@ -39,13 +38,7 @@ async def run_quality_agent(
     start = time.perf_counter()
 
     try:
-        llm = ChatAnthropic(
-            model=settings.llm_model,
-            api_key=settings.anthropic_api_key,
-            temperature=0,
-            max_tokens=4096,
-        )
-        structured_llm = llm.with_structured_output(QualityReviewOutput)
+        structured_llm = get_llm().with_structured_output(QualityReviewOutput, method="json_mode")
 
         prompt = build_review_prompt(
             state["code"],
