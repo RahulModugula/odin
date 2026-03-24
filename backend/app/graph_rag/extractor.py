@@ -4,9 +4,8 @@ import hashlib
 
 from app.graph_rag.models import GraphEdge, GraphNode
 from app.models.enums import Language
-from app.parsers.tree_sitter_parser import parse_code
 from app.parsers.languages import get_language
-
+from app.parsers.tree_sitter_parser import parse_code
 
 # Call expression node types per language
 _CALL_NODES: dict[str, str] = {
@@ -39,51 +38,61 @@ def extract_graph_entities(
 
     # Module node
     module_id = _node_id("module", file_path, file_path)
-    nodes.append(GraphNode(
-        id=module_id,
-        name=file_path,
-        kind="module",
-        file_path=file_path,
-        language=lang_key,
-    ))
+    nodes.append(
+        GraphNode(
+            id=module_id,
+            name=file_path,
+            kind="module",
+            file_path=file_path,
+            language=lang_key,
+        )
+    )
 
     # Function nodes + CONTAINS edges
     for func in structure.functions:
         func_id = _node_id("function", func.name, file_path)
-        nodes.append(GraphNode(
-            id=func_id,
-            name=func.name,
-            kind="function",
-            file_path=file_path,
-            language=lang_key,
-            line_start=func.line_start,
-            line_end=func.line_end,
-            metadata={"param_count": func.param_count, "has_docstring": func.has_docstring},
-        ))
-        edges.append(GraphEdge(
-            source_id=module_id,
-            target_id=func_id,
-            relationship="CONTAINS",
-        ))
+        nodes.append(
+            GraphNode(
+                id=func_id,
+                name=func.name,
+                kind="function",
+                file_path=file_path,
+                language=lang_key,
+                line_start=func.line_start,
+                line_end=func.line_end,
+                metadata={"param_count": func.param_count, "has_docstring": func.has_docstring},
+            )
+        )
+        edges.append(
+            GraphEdge(
+                source_id=module_id,
+                target_id=func_id,
+                relationship="CONTAINS",
+            )
+        )
 
     # Class nodes + CONTAINS edges
     for cls in structure.classes:
         cls_id = _node_id("class", cls.name, file_path)
-        nodes.append(GraphNode(
-            id=cls_id,
-            name=cls.name,
-            kind="class",
-            file_path=file_path,
-            language=lang_key,
-            line_start=cls.line_start,
-            line_end=cls.line_end,
-            metadata={"method_count": cls.method_count, "has_docstring": cls.has_docstring},
-        ))
-        edges.append(GraphEdge(
-            source_id=module_id,
-            target_id=cls_id,
-            relationship="CONTAINS",
-        ))
+        nodes.append(
+            GraphNode(
+                id=cls_id,
+                name=cls.name,
+                kind="class",
+                file_path=file_path,
+                language=lang_key,
+                line_start=cls.line_start,
+                line_end=cls.line_end,
+                metadata={"method_count": cls.method_count, "has_docstring": cls.has_docstring},
+            )
+        )
+        edges.append(
+            GraphEdge(
+                source_id=module_id,
+                target_id=cls_id,
+                relationship="CONTAINS",
+            )
+        )
 
     # Import edges: module IMPORTS target
     for imp in structure.imports:
@@ -91,18 +100,22 @@ def extract_graph_entities(
         if target_name:
             target_id = _node_id("module", target_name, target_name)
             # Ensure target node exists (stub)
-            nodes.append(GraphNode(
-                id=target_id,
-                name=target_name,
-                kind="module",
-                file_path=target_name,
-                language=lang_key,
-            ))
-            edges.append(GraphEdge(
-                source_id=module_id,
-                target_id=target_id,
-                relationship="IMPORTS",
-            ))
+            nodes.append(
+                GraphNode(
+                    id=target_id,
+                    name=target_name,
+                    kind="module",
+                    file_path=target_name,
+                    language=lang_key,
+                )
+            )
+            edges.append(
+                GraphEdge(
+                    source_id=module_id,
+                    target_id=target_id,
+                    relationship="IMPORTS",
+                )
+            )
 
     # Call edges: extract call expressions from the AST
     call_edges = _extract_call_edges(code, language, file_path, lang_key)
@@ -140,7 +153,7 @@ def _extract_call_edges(
     if ts_lang is None:
         return []
 
-    from tree_sitter import Parser  # type: ignore[import-untyped]
+    from tree_sitter import Parser
 
     call_node_type = _CALL_NODES.get(lang_key)
     callee_field = _CALLEE_FIELD.get(lang_key, "function")
@@ -152,8 +165,9 @@ def _extract_call_edges(
     edges: list[GraphEdge] = []
     caller_id = _node_id("module", file_path, file_path)
 
-    def walk(node: object) -> None:  # type: ignore[type-arg]
-        from tree_sitter import Node  # type: ignore[import-untyped]
+    def walk(node: object) -> None:
+        from tree_sitter import Node
+
         assert isinstance(node, Node)
         if node.type == call_node_type:
             callee = node.child_by_field_name(callee_field)
@@ -164,12 +178,14 @@ def _extract_call_edges(
                     callee_name = callee_name.split(".")[-1]
                 if callee_name:
                     target_id = _node_id("function", callee_name, file_path)
-                    edges.append(GraphEdge(
-                        source_id=caller_id,
-                        target_id=target_id,
-                        relationship="CALLS",
-                        metadata={"callee_name": callee_name},
-                    ))
+                    edges.append(
+                        GraphEdge(
+                            source_id=caller_id,
+                            target_id=target_id,
+                            relationship="CALLS",
+                            metadata={"callee_name": callee_name},
+                        )
+                    )
         for child in node.children:
             walk(child)
 

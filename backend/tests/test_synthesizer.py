@@ -1,6 +1,6 @@
+from app.agents.graph import _calculate_score, synthesize
 from app.models.enums import Category, Severity
 from app.models.schemas import CodeMetrics, Finding
-from app.agents.graph import _calculate_score, synthesize
 
 
 def _make_metrics(

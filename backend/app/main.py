@@ -1,17 +1,16 @@
 import uuid
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.config import settings
-from app.api.routes import router
-from app.observability.tracing import flush_langfuse
 import app.graph_rag._store_ref as _store_ref
-
+from app.api.routes import router
+from app.config import settings
+from app.observability.tracing import flush_langfuse
 
 logger = structlog.get_logger()
 
@@ -24,7 +23,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             structlog.processors.JSONRenderer(),
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
-            structlog.get_level_from_name(settings.log_level)
+            structlog.get_level_from_name(settings.log_level)  # type: ignore[operator]
         ),
     )
     logger.info("odin starting up")
@@ -74,7 +73,7 @@ async def request_id_middleware(request: Request, call_next) -> Response:  # typ
     request.state.request_id = request_id
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
-    return response
+    return response  # type: ignore[no-any-return]
 
 
 @app.exception_handler(Exception)

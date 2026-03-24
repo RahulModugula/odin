@@ -2,20 +2,21 @@ import time
 
 import structlog
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
+from app.agents.prompts import QUALITY_SYSTEM_PROMPT, build_review_prompt
 from app.config import settings
 from app.models.enums import Category, Severity
 from app.models.schemas import AgentOutput, Finding
-from app.agents.prompts import QUALITY_SYSTEM_PROMPT, build_review_prompt
 
 logger = structlog.get_logger()
 
 
 class QualityFinding(BaseModel):
     """A single code quality finding."""
+
     severity: Severity
     title: str
     description: str
@@ -27,6 +28,7 @@ class QualityFinding(BaseModel):
 
 class QualityReviewOutput(BaseModel):
     """Structured output from the quality review agent."""
+
     findings: list[QualityFinding] = []
 
 

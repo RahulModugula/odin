@@ -1,8 +1,5 @@
-import pytest
-
 from app.graph_rag.extractor import extract_graph_entities
 from app.models.enums import Language
-
 
 SIMPLE_PYTHON = """
 import os

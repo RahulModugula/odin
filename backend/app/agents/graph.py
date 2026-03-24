@@ -1,15 +1,14 @@
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
+from app.agents.docs_agent import run_docs_agent
+from app.agents.quality_agent import run_quality_agent
+from app.agents.security_agent import run_security_agent
 from app.config import settings
-from app.models.enums import Severity, Language
+from app.models.enums import Language, Severity
 from app.models.schemas import CodeMetrics, Finding
 from app.models.state import ReviewState
 from app.parsers.tree_sitter_parser import parse_code
-from app.agents.quality_agent import run_quality_agent
-from app.agents.security_agent import run_security_agent
-from app.agents.docs_agent import run_docs_agent
-
 
 SEVERITY_PENALTY = {
     Severity.CRITICAL: 20,
@@ -38,12 +37,12 @@ async def enrich_context_node(state: ReviewState) -> dict:  # type: ignore[type-
         return {"codebase_context": ""}
 
     try:
+        # graph_store is expected to be set on app state and passed via context
+        # when not available (e.g. tests), fall through gracefully
+        import app.graph_rag._store_ref as _ref
         from app.graph_rag.context_builder import build_context
         from app.graph_rag.store import GraphStore
 
-        # graph_store is expected to be set on app state and passed via context
-        # when not available (e.g. tests), fall through gracefully
-        import app.graph_rag._store_ref as _ref  # type: ignore[import-not-found]
         store: GraphStore | None = getattr(_ref, "store", None)
 
         context = await build_context(
@@ -83,10 +82,12 @@ def synthesize(state: ReviewState) -> dict:  # type: ignore[type-arg]
 
     # Sort by severity (critical first), then by line number
     severity_order = list(Severity)
-    deduped.sort(key=lambda f: (
-        severity_order.index(f.severity),
-        f.line_start or 999999,
-    ))
+    deduped.sort(
+        key=lambda f: (
+            severity_order.index(f.severity),
+            f.line_start or 999999,
+        )
+    )
 
     # Calculate score
     score = _calculate_score(deduped, state.get("metrics"))
@@ -212,7 +213,9 @@ builder.add_node("synthesize", synthesize)
 
 builder.add_edge(START, "parse_code")
 builder.add_edge("parse_code", "enrich_context")
-builder.add_conditional_edges("enrich_context", fan_out_to_agents, ["quality_agent", "security_agent", "docs_agent"])
+builder.add_conditional_edges(
+    "enrich_context", fan_out_to_agents, ["quality_agent", "security_agent", "docs_agent"]
+)
 builder.add_edge("quality_agent", "synthesize")
 builder.add_edge("security_agent", "synthesize")
 builder.add_edge("docs_agent", "synthesize")

@@ -2,20 +2,21 @@ import time
 
 import structlog
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
+from app.agents.prompts import SECURITY_SYSTEM_PROMPT, build_review_prompt
 from app.config import settings
 from app.models.enums import Category, Severity
 from app.models.schemas import AgentOutput, Finding
-from app.agents.prompts import SECURITY_SYSTEM_PROMPT, build_review_prompt
 
 logger = structlog.get_logger()
 
 
 class SecurityFinding(BaseModel):
     """A single security finding."""
+
     severity: Severity
     title: str
     description: str
@@ -27,6 +28,7 @@ class SecurityFinding(BaseModel):
 
 class SecurityReviewOutput(BaseModel):
     """Structured output from the security review agent."""
+
     findings: list[SecurityFinding] = []
 
 

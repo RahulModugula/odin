@@ -2,6 +2,7 @@
 
 Set during application startup in main.py lifespan.
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

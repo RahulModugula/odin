@@ -1,4 +1,5 @@
 import uuid
+
 from pydantic import BaseModel, Field
 
 from app.models.enums import Category, Language, Severity

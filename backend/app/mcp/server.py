@@ -4,23 +4,23 @@ Supports two transports:
   - stdio: for Claude Code / Cursor integration (via app.mcp.stdio_runner)
   - SSE:   mounted on FastAPI at /mcp for remote access
 """
+
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
 import structlog
-from mcp.server.fastmcp import FastMCP  # type: ignore[import-untyped]
+from mcp.server.fastmcp import FastMCP
 
 from app.agents.graph import review_graph
-from app.config import settings
 from app.models.enums import Language
+from app.models.state import ReviewState
 from app.parsers.languages import supported_languages
 
 logger = structlog.get_logger()
 
-mcp = FastMCP("odin", version="0.1.0")
+mcp = FastMCP("odin")
 
 _EXTENSION_MAP: dict[str, Language] = {
     ".py": Language.PYTHON,
@@ -46,11 +46,11 @@ async def _run_review(
     language: Language,
     file_path: str | None = None,
 ) -> dict[str, Any]:
-    initial_state = {
+    initial_state: ReviewState = {
         "code": code,
         "language": language.value,
         "ast_summary": "",
-        "metrics": None,
+        "metrics": None,  # type: ignore[typeddict-item]
         "findings": [],
         "agent_outputs": [],
         "overall_score": 100,
@@ -58,7 +58,7 @@ async def _run_review(
         "codebase_context": "",
         "file_path": file_path,
     }
-    result = await review_graph.ainvoke(initial_state)
+    result: dict[str, Any] = await review_graph.ainvoke(initial_state)
     return {
         "overall_score": result["overall_score"],
         "summary": result["summary"],
@@ -120,7 +120,7 @@ async def get_findings(
     """
     lang = _detect_language("", hint=language)
     result = await _run_review(code, lang)
-    findings = result["findings"]
+    findings: list[dict[str, Any]] = result["findings"]
 
     if severity:
         findings = [f for f in findings if f.get("severity") == severity.lower()]
@@ -145,7 +145,10 @@ async def query_codebase(
 
     if _store_ref.store is None or not _store_ref.store.is_connected:
         return {
-            "error": "Knowledge graph not available. Index files via POST /api/index or enable ODIN_GRAPH_RAG_ENABLED."
+            "error": (
+                "Knowledge graph not available. "
+                "Index files via POST /api/index or enable ODIN_GRAPH_RAG_ENABLED."
+            )
         }
 
     ctx = await _store_ref.store.query_context(

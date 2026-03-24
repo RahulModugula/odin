@@ -2,17 +2,19 @@ import json
 import time
 import uuid
 from collections.abc import AsyncIterator
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from app.models.schemas import ReviewRequest, ReviewResult
-from app.models.enums import Language
-from app.parsers.languages import supported_languages
 from app.agents.graph import review_graph
+from app.models.enums import Language
+from app.models.schemas import ReviewRequest, ReviewResult
+from app.models.state import ReviewState
 from app.observability.tracing import create_langfuse_handler
+from app.parsers.languages import supported_languages
 
 logger = structlog.get_logger()
 router = APIRouter()
@@ -32,11 +34,11 @@ async def create_review(request: ReviewRequest) -> ReviewResult:
     start = time.perf_counter()
     review_id = str(uuid.uuid4())
 
-    initial_state = {
+    initial_state: ReviewState = {
         "code": request.code,
         "language": request.language.value,
         "ast_summary": "",
-        "metrics": None,
+        "metrics": None,  # type: ignore[typeddict-item]
         "findings": [],
         "agent_outputs": [],
         "overall_score": 100,
@@ -50,7 +52,9 @@ async def create_review(request: ReviewRequest) -> ReviewResult:
         metadata={"language": request.language.value},
     )
     callbacks = [handler] if handler is not None else []
-    result = await review_graph.ainvoke(initial_state, config={"callbacks": callbacks})
+    result: dict[str, Any] = await review_graph.ainvoke(
+        initial_state, config={"callbacks": callbacks}
+    )
     elapsed_ms = (time.perf_counter() - start) * 1000
 
     return ReviewResult(
@@ -70,11 +74,11 @@ async def stream_review(request: ReviewRequest) -> StreamingResponse:
     review_id = str(uuid.uuid4())
 
     async def event_stream() -> AsyncIterator[str]:
-        initial_state = {
+        stream_state: ReviewState = {
             "code": request.code,
             "language": request.language.value,
             "ast_summary": "",
-            "metrics": None,
+            "metrics": None,  # type: ignore[typeddict-item]
             "findings": [],
             "agent_outputs": [],
             "overall_score": 100,
@@ -91,28 +95,33 @@ async def stream_review(request: ReviewRequest) -> StreamingResponse:
         )
         callbacks = [handler] if handler is not None else []
         async for event in review_graph.astream_events(
-            initial_state, config={"callbacks": callbacks}, version="v2"
+            stream_state, config={"callbacks": callbacks}, version="v2"
         ):
             kind = event.get("event", "")
             name = event.get("name", "")
 
-            if kind == "on_chain_start" and name in ("quality_agent", "security_agent", "docs_agent"):
+            _agent_names = ("quality_agent", "security_agent", "docs_agent")
+            if kind == "on_chain_start" and name in _agent_names:
                 sse_data = json.dumps({"type": "agent_start", "agent": name})
                 yield f"data: {sse_data}\n\n"
 
-            elif kind == "on_chain_end" and name in ("quality_agent", "security_agent", "docs_agent"):
-                output = event.get("data", {}).get("output", {})
+            elif kind == "on_chain_end" and name in _agent_names:
+                output: dict[str, Any] = event.get("data", {}).get("output", {})
                 findings = output.get("findings", [])
                 for finding in findings:
-                    finding_data = finding.model_dump() if hasattr(finding, "model_dump") else finding
+                    finding_data = (
+                        finding.model_dump() if hasattr(finding, "model_dump") else finding
+                    )  # noqa: E501
                     sse_data = json.dumps({"type": "finding", "agent": name, "data": finding_data})
                     yield f"data: {sse_data}\n\n"
 
-                sse_data = json.dumps({
-                    "type": "agent_complete",
-                    "agent": name,
-                    "findings_count": len(findings),
-                })
+                sse_data = json.dumps(
+                    {
+                        "type": "agent_complete",
+                        "agent": name,
+                        "findings_count": len(findings),
+                    }
+                )
                 yield f"data: {sse_data}\n\n"
 
             elif kind == "on_chain_end" and name == "synthesize":

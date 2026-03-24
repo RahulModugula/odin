@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import contextlib
+from typing import Any
+
 import structlog
 
-from app.graph_rag.models import CodebaseContext, GraphEdge, GraphNode
 from app.graph_rag.extractor import extract_graph_entities
+from app.graph_rag.models import CodebaseContext, GraphEdge, GraphNode
 from app.models.enums import Language
 
 logger = structlog.get_logger()
@@ -15,11 +18,11 @@ class GraphStore:
     def __init__(self, uri: str, auth: tuple[str, str] | None = None) -> None:
         self._uri = uri
         self._auth = auth
-        self._driver: object | None = None
+        self._driver: Any = None
 
     async def connect(self) -> None:
         try:
-            from neo4j import AsyncGraphDatabase  # type: ignore[import-untyped]
+            from neo4j import AsyncGraphDatabase
 
             self._driver = AsyncGraphDatabase.driver(
                 self._uri,
@@ -33,10 +36,8 @@ class GraphStore:
 
     async def close(self) -> None:
         if self._driver is not None:
-            try:
-                await self._driver.close()  # type: ignore[union-attr]
-            except Exception:
-                pass
+            with contextlib.suppress(Exception):
+                await self._driver.close()
             self._driver = None
 
     @property
@@ -47,14 +48,14 @@ class GraphStore:
         """Create indexes for fast node lookups."""
         if self._driver is None:
             return
-        async with self._driver.session() as session:  # type: ignore[union-attr]
+        async with self._driver.session() as session:
             await session.run("CREATE INDEX ON :CodeNode(id) IF NOT EXISTS")
             await session.run("CREATE INDEX ON :CodeNode(name) IF NOT EXISTS")
 
     async def upsert_nodes(self, nodes: list[GraphNode]) -> None:
         if self._driver is None or not nodes:
             return
-        async with self._driver.session() as session:  # type: ignore[union-attr]
+        async with self._driver.session() as session:
             for node in nodes:
                 await session.run(
                     """
@@ -78,7 +79,7 @@ class GraphStore:
     async def upsert_edges(self, edges: list[GraphEdge]) -> None:
         if self._driver is None or not edges:
             return
-        async with self._driver.session() as session:  # type: ignore[union-attr]
+        async with self._driver.session() as session:
             for edge in edges:
                 await session.run(
                     """
@@ -107,7 +108,7 @@ class GraphStore:
         if self._driver is None or not function_names:
             return CodebaseContext(queried_names=function_names)
 
-        from app.graph_rag.models import CallerInfo, CalleeInfo
+        from app.graph_rag.models import CalleeInfo, CallerInfo
 
         callers: list[CallerInfo] = []
         callees: list[CalleeInfo] = []
@@ -115,7 +116,7 @@ class GraphStore:
         imports: list[str] = []
         parent_class: str | None = None
 
-        async with self._driver.session() as session:  # type: ignore[union-attr]
+        async with self._driver.session() as session:
             # Find what calls these functions
             result = await session.run(
                 """
@@ -127,11 +128,13 @@ class GraphStore:
                 names=function_names,
             )
             async for record in result:
-                callers.append(CallerInfo(
-                    name=record["name"],
-                    file_path=record["file_path"],
-                    kind=record["kind"],
-                ))
+                callers.append(
+                    CallerInfo(
+                        name=record["name"],
+                        file_path=record["file_path"],
+                        kind=record["kind"],
+                    )
+                )
 
             # Find what these functions call
             result = await session.run(
@@ -144,16 +147,17 @@ class GraphStore:
                 names=function_names,
             )
             async for record in result:
-                callees.append(CalleeInfo(
-                    name=record["name"],
-                    file_path=record["file_path"],
-                ))
+                callees.append(
+                    CalleeInfo(
+                        name=record["name"],
+                        file_path=record["file_path"],
+                    )
+                )
 
             # Find sibling functions in the same file
             result = await session.run(
                 """
-                MATCH (m:CodeNode {file_path: $file_path, kind: 'module'})-[r:RELATES {type: 'CONTAINS'}]->(f:CodeNode)
-                WHERE f.kind = 'function' AND NOT f.name IN $names
+                MATCH (m:CodeNode {file_path: $file_path, kind: 'module'})-[r:RELATES {type: 'CONTAINS'}]->(f:CodeNode)                WHERE f.kind = 'function' AND NOT f.name IN $names
                 RETURN f.name AS name
                 LIMIT 10
                 """,
@@ -166,8 +170,7 @@ class GraphStore:
             # Find imports of the file's module
             result = await session.run(
                 """
-                MATCH (m:CodeNode {file_path: $file_path, kind: 'module'})-[r:RELATES {type: 'IMPORTS'}]->(dep:CodeNode)
-                RETURN dep.name AS name
+                MATCH (m:CodeNode {file_path: $file_path, kind: 'module'})-[r:RELATES {type: 'IMPORTS'}]->(dep:CodeNode)                RETURN dep.name AS name
                 LIMIT 10
                 """,
                 file_path=file_path,
@@ -178,8 +181,7 @@ class GraphStore:
             # Find parent class if function is a method
             result = await session.run(
                 """
-                MATCH (c:CodeNode {file_path: $file_path, kind: 'class'})-[r:RELATES {type: 'CONTAINS'}]->(f:CodeNode)
-                WHERE f.name IN $names
+                MATCH (c:CodeNode {file_path: $file_path, kind: 'class'})-[r:RELATES {type: 'CONTAINS'}]->(f:CodeNode)                WHERE f.name IN $names
                 RETURN c.name AS name
                 LIMIT 1
                 """,

@@ -26,7 +26,8 @@ def test_create_handler_enabled_returns_handler():
         mock_settings.langfuse_secret_key = "sk-test"
         mock_settings.langfuse_host = "https://cloud.langfuse.com"
 
-        with patch.dict("sys.modules", {"langfuse.callback": MagicMock(CallbackHandler=mock_handler_class)}):
+        module_mock = MagicMock(CallbackHandler=mock_handler_class)
+        with patch.dict("sys.modules", {"langfuse.callback": module_mock}):
             from app.observability import tracing
 
             result = tracing.create_langfuse_handler("trace-abc", metadata={"language": "python"})
@@ -37,12 +38,14 @@ def test_create_handler_enabled_returns_handler():
 
 
 def test_flush_langfuse_no_client_no_error():
-    with patch("app.observability.tracing._langfuse_client", None):
-        with patch("app.observability.tracing.settings") as mock_settings:
-            mock_settings.langfuse_enabled = False
-            from app.observability import tracing
+    with (
+        patch("app.observability.tracing._langfuse_client", None),
+        patch("app.observability.tracing.settings") as mock_settings,
+    ):
+        mock_settings.langfuse_enabled = False
+        from app.observability import tracing
 
-            tracing.flush_langfuse()  # Should not raise
+        tracing.flush_langfuse()  # Should not raise
 
 
 def test_flush_langfuse_calls_flush():

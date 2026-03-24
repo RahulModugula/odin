@@ -2,20 +2,21 @@ import time
 
 import structlog
 from langchain_anthropic import ChatAnthropic
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import RunnableConfig
 from pydantic import BaseModel, Field
 
+from app.agents.prompts import DOCS_SYSTEM_PROMPT, build_review_prompt
 from app.config import settings
 from app.models.enums import Category, Severity
 from app.models.schemas import AgentOutput, Finding
-from app.agents.prompts import DOCS_SYSTEM_PROMPT, build_review_prompt
 
 logger = structlog.get_logger()
 
 
 class DocsFinding(BaseModel):
     """A single documentation finding."""
+
     severity: Severity
     title: str
     description: str
@@ -27,6 +28,7 @@ class DocsFinding(BaseModel):
 
 class DocsReviewOutput(BaseModel):
     """Structured output from the documentation review agent."""
+
     findings: list[DocsFinding] = []
 
 

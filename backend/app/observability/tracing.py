@@ -16,7 +16,7 @@ def _get_langfuse_client() -> Any:
     global _langfuse_client
     if _langfuse_client is None and settings.langfuse_enabled:
         try:
-            from langfuse import Langfuse  # type: ignore[import-untyped]
+            from langfuse import Langfuse
 
             _langfuse_client = Langfuse(
                 public_key=settings.langfuse_public_key,
@@ -42,7 +42,7 @@ def create_langfuse_handler(
         return None
 
     try:
-        from langfuse.callback import CallbackHandler  # type: ignore[import-untyped]
+        from langfuse.callback import CallbackHandler
 
         return CallbackHandler(
             public_key=settings.langfuse_public_key,

@@ -10,10 +10,13 @@ def test_health(client: TestClient) -> None:
 
 
 def test_review_valid_python(client: TestClient, python_good_code: str) -> None:
-    response = client.post("/api/review", json={
-        "code": python_good_code,
-        "language": "python",
-    })
+    response = client.post(
+        "/api/review",
+        json={
+            "code": python_good_code,
+            "language": "python",
+        },
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["language"] == "python"
@@ -23,28 +26,37 @@ def test_review_valid_python(client: TestClient, python_good_code: str) -> None:
 
 
 def test_review_empty_code(client: TestClient) -> None:
-    response = client.post("/api/review", json={
-        "code": "",
-        "language": "python",
-    })
+    response = client.post(
+        "/api/review",
+        json={
+            "code": "",
+            "language": "python",
+        },
+    )
     assert response.status_code == 422
 
 
 def test_review_javascript(client: TestClient, javascript_bad_code: str) -> None:
-    response = client.post("/api/review", json={
-        "code": javascript_bad_code,
-        "language": "javascript",
-    })
+    response = client.post(
+        "/api/review",
+        json={
+            "code": javascript_bad_code,
+            "language": "javascript",
+        },
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["metrics"]["num_functions"] >= 2
 
 
 def test_review_includes_timing(client: TestClient, python_good_code: str) -> None:
-    response = client.post("/api/review", json={
-        "code": python_good_code,
-        "language": "python",
-    })
+    response = client.post(
+        "/api/review",
+        json={
+            "code": python_good_code,
+            "language": "python",
+        },
+    )
     data = response.json()
     assert data["total_time_ms"] > 0
     assert "id" in data

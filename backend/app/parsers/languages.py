@@ -1,5 +1,5 @@
-import tree_sitter_python
 import tree_sitter_javascript
+import tree_sitter_python
 from tree_sitter import Language
 
 from app.models.enums import Language as LangEnum

@@ -17,9 +17,8 @@ Configure in Claude Code (~/.claude/claude_desktop_config.json):
       }
     }
 """
-from __future__ import annotations
 
-import asyncio
+from __future__ import annotations
 
 import structlog
 

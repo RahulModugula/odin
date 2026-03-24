@@ -1,4 +1,4 @@
-from tree_sitter import Parser, Node
+from tree_sitter import Node, Parser
 
 from app.models.enums import Language
 from app.models.schemas import (
@@ -9,17 +9,27 @@ from app.models.schemas import (
 )
 from app.parsers.languages import get_language
 
-
 # Node types that increase cyclomatic complexity
 _COMPLEXITY_NODES: dict[str, set[str]] = {
     "python": {
-        "if_statement", "elif_clause", "for_statement", "while_statement",
-        "except_clause", "with_statement", "boolean_operator",
-        "conditional_expression", "list_comprehension",
+        "if_statement",
+        "elif_clause",
+        "for_statement",
+        "while_statement",
+        "except_clause",
+        "with_statement",
+        "boolean_operator",
+        "conditional_expression",
+        "list_comprehension",
     },
     "javascript": {
-        "if_statement", "for_statement", "for_in_statement", "while_statement",
-        "do_statement", "catch_clause", "ternary_expression",
+        "if_statement",
+        "for_statement",
+        "for_in_statement",
+        "while_statement",
+        "do_statement",
+        "catch_clause",
+        "ternary_expression",
         "binary_expression",  # for && and ||
         "switch_case",
     },
@@ -104,14 +114,16 @@ def _extract_functions(root: Node, lang: str) -> list[FunctionInfo]:
             body_length = line_end - line_start + 1
             has_doc = _has_docstring(node, lang)
 
-            functions.append(FunctionInfo(
-                name=name,
-                line_start=line_start,
-                line_end=line_end,
-                param_count=params,
-                body_length=body_length,
-                has_docstring=has_doc,
-            ))
+            functions.append(
+                FunctionInfo(
+                    name=name,
+                    line_start=line_start,
+                    line_end=line_end,
+                    param_count=params,
+                    body_length=body_length,
+                    has_docstring=has_doc,
+                )
+            )
 
         for child in node.children:
             walk(child)
@@ -134,13 +146,15 @@ def _extract_classes(root: Node, lang: str) -> list[ClassInfo]:
             method_count = _count_methods(node, lang)
             has_doc = _has_docstring(node, lang)
 
-            classes.append(ClassInfo(
-                name=name,
-                line_start=line_start,
-                line_end=line_end,
-                method_count=method_count,
-                has_docstring=has_doc,
-            ))
+            classes.append(
+                ClassInfo(
+                    name=name,
+                    line_start=line_start,
+                    line_end=line_end,
+                    method_count=method_count,
+                    has_docstring=has_doc,
+                )
+            )
 
         for child in node.children:
             walk(child)
@@ -187,11 +201,26 @@ def _calculate_complexity(root: Node, lang: str) -> int:
 
 def _calculate_nesting_depth(root: Node, lang: str) -> int:
     nesting_types = {
-        "python": {"if_statement", "for_statement", "while_statement", "with_statement",
-                    "try_statement", "function_definition", "class_definition"},
-        "javascript": {"if_statement", "for_statement", "for_in_statement", "while_statement",
-                       "do_statement", "try_statement", "function_declaration",
-                       "arrow_function", "class_declaration"},
+        "python": {
+            "if_statement",
+            "for_statement",
+            "while_statement",
+            "with_statement",
+            "try_statement",
+            "function_definition",
+            "class_definition",
+        },
+        "javascript": {
+            "if_statement",
+            "for_statement",
+            "for_in_statement",
+            "while_statement",
+            "do_statement",
+            "try_statement",
+            "function_declaration",
+            "arrow_function",
+            "class_declaration",
+        },
     }
     types = nesting_types.get(lang, set())
     max_depth = 0
@@ -237,16 +266,24 @@ def _count_params(node: Node, lang: str) -> int:
     if lang == "python":
         params_node = node.child_by_field_name("parameters")
     else:
-        params_node = node.child_by_field_name("parameters") or node.child_by_field_name("parameter")
+        params_node = node.child_by_field_name("parameters") or node.child_by_field_name(
+            "parameter"
+        )
 
     if not params_node:
         return 0
 
     count = 0
     for child in params_node.children:
-        if child.type in ("identifier", "typed_parameter", "default_parameter",
-                          "typed_default_parameter", "formal_parameters",
-                          "required_parameter", "optional_parameter"):
+        if child.type in (
+            "identifier",
+            "typed_parameter",
+            "default_parameter",
+            "typed_default_parameter",
+            "formal_parameters",
+            "required_parameter",
+            "optional_parameter",
+        ):
             count += 1
     return count
 

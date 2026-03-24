@@ -2,14 +2,14 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.models.enums import Category, Severity
-from app.models.schemas import CodeMetrics, Finding
 from app.agents.graph import (
     _calculate_score,
     _deduplicate_findings,
     _generate_summary,
     review_graph,
 )
+from app.models.enums import Category, Severity
+from app.models.schemas import CodeMetrics, Finding
 
 
 def test_graph_compiles() -> None:
@@ -113,9 +113,27 @@ def test_score_critical_findings() -> None:
 def test_score_mixed_findings() -> None:
     """Mixed severity findings should produce intermediate score."""
     findings = [
-        Finding(severity=Severity.HIGH, category=Category.QUALITY, title="a", description="a", confidence=0.8),
-        Finding(severity=Severity.MEDIUM, category=Category.QUALITY, title="b", description="b", confidence=0.8),
-        Finding(severity=Severity.LOW, category=Category.DOCUMENTATION, title="c", description="c", confidence=0.8),
+        Finding(
+            severity=Severity.HIGH,
+            category=Category.QUALITY,
+            title="a",
+            description="a",
+            confidence=0.8,
+        ),
+        Finding(
+            severity=Severity.MEDIUM,
+            category=Category.QUALITY,
+            title="b",
+            description="b",
+            confidence=0.8,
+        ),
+        Finding(
+            severity=Severity.LOW,
+            category=Category.DOCUMENTATION,
+            title="c",
+            description="c",
+            confidence=0.8,
+        ),
     ]
     score = _calculate_score(findings, None)
     assert score == 100 - 10 - 5 - 2  # 83
@@ -128,7 +146,13 @@ def test_summary_no_findings() -> None:
 
 def test_summary_with_critical() -> None:
     findings = [
-        Finding(severity=Severity.CRITICAL, category=Category.SECURITY, title="x", description="x", confidence=0.9),
+        Finding(
+            severity=Severity.CRITICAL,
+            category=Category.SECURITY,
+            title="x",
+            description="x",
+            confidence=0.9,
+        ),
     ]
     summary = _generate_summary(findings, 30)
     assert "1" in summary

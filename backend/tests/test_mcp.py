@@ -1,5 +1,6 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 
 @pytest.mark.asyncio
@@ -8,10 +9,17 @@ async def test_review_code_tool_returns_dict():
         "overall_score": 85,
         "summary": "Code looks good.",
         "findings": [],
-        "metrics": {"lines_of_code": 10, "num_functions": 1, "num_classes": 0,
-                    "avg_function_length": 5.0, "max_function_length": 5,
-                    "max_nesting_depth": 1, "cyclomatic_complexity": 1,
-                    "comment_ratio": 0.0, "import_count": 0},
+        "metrics": {
+            "lines_of_code": 10,
+            "num_functions": 1,
+            "num_classes": 0,
+            "avg_function_length": 5.0,
+            "max_function_length": 5,
+            "max_nesting_depth": 1,
+            "cyclomatic_complexity": 1,
+            "comment_ratio": 0.0,
+            "import_count": 0,
+        },
     }
 
     with patch("app.mcp.server._run_review", new=AsyncMock(return_value=mock_result)):
