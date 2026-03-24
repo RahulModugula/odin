@@ -23,6 +23,11 @@ class Settings(BaseSettings):
     memgraph_uri: str = "bolt://localhost:7687"
     memgraph_auth: str | None = None
 
+    # GitHub webhook integration
+    github_token: str = ""
+    github_webhook_secret: str = ""
+    webhook_max_file_bytes: int = 100_000
+
     # MCP server
     mcp_enabled: bool = True
 
