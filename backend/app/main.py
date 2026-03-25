@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 import app.graph_rag._store_ref as _store_ref
 from app.api.routes import router
+from app.api.webhook import webhook_router
 from app.config import settings
 from app.observability.tracing import flush_langfuse
 
@@ -87,6 +88,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 
 app.include_router(router, prefix="/api")
+app.include_router(webhook_router, prefix="/api")
 
 if settings.mcp_enabled:
     try:
