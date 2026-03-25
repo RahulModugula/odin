@@ -6,63 +6,140 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  lint:
+  # ── Backend ────────────────────────────────────────────────────────────────
+  backend-lint:
+    name: Backend lint
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - run: uv python install 3.12
-      - run: cd backend && uv venv .venv && uv pip install --system -e ".[dev]"
-      - run: cd backend && ruff check app/ tests/
-      - run: cd backend && ruff format --check app/ tests/
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+      - run: uv sync --dev
+      - run: uv run ruff check app/ tests/ --output-format=github
+      - run: uv run ruff format --check app/ tests/
 
-  test:
+  backend-test:
+    name: Backend tests
     runs-on: ubuntu-latest
     services:
       redis:
         image: redis:7-alpine
         ports:
           - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v4
-      - run: uv python install 3.12
-      - run: cd backend && uv venv .venv && uv pip install --system -e ".[dev]"
-      - run: cd backend && pytest tests/ -v --cov=app --cov-report=term-missing
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+      - run: uv sync --dev
+      - name: Run tests with coverage
         env:
           ODIN_REDIS_URL: redis://localhost:6379/0
-
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: docker build -t odin-backend ./backend
-      - run: docker build -t odin-backend-prod -f ./backend/Dockerfile.production ./backend
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: [lint, test, build]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Authenticate to GCP
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Submit Cloud Build
+          ODIN_LLM_API_KEY: test-key
         run: |
-          gcloud builds submit \
-            --config infra/cloudbuild.yaml \
-            --project ${{ secrets.GCP_PROJECT_ID }} \
-            --substitutions SHORT_SHA=${GITHUB_SHA::8} \
-            .
+          uv run pytest tests/ -v \
+            --tb=short \
+            --cov=app \
+            --cov-report=term-missing \
+            --cov-report=xml \
+            --cov-fail-under=60
+      - uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          file: backend/coverage.xml
+          flags: backend
+          fail_ci_if_error: false
+
+  backend-eval:
+    name: Benchmark (rules-only)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+      - run: uv sync
+      - name: Run deterministic benchmark
+        run: uv run python eval/runner.py --rules-only
+      - uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: backend/eval/results/latest_rules.json
+
+  # ── Frontend ──────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend (type-check + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Build
+        run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 7
+
+  # ── Docker ────────────────────────────────────────────────────────────────
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    needs: [backend-lint, backend-test, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Security ──────────────────────────────────────────────────────────────
+  security:
+    name: CodeQL security scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python, javascript
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
