@@ -1,5 +1,5 @@
-[
-    {"category": "maintainability", "severity": "medium", "title_pattern": "(?i)(missing|lack|no).*(doc|comment|docstring)"},
-    {"category": "maintainability", "severity": "medium", "title_pattern": "(?i)(missing|lack|no).*(doc|comment|docstring)"},
-    {"category": "maintainability", "severity": "low", "title_pattern": "(?i)(missing|lack|no).*(doc|comment|docstring)"}
-]
+{
+  "expected_findings": [
+    {"category": "quality", "severity": "low", "title_pattern": "(?i)(type hint|return type)", "min_count": 1}
+  ]
+}

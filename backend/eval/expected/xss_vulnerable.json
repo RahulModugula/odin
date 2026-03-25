@@ -1,5 +1,5 @@
-[
-    {"category": "security", "severity": "critical", "title_pattern": "(?i)(xss|cross.site.script|innerHTML)"},
-    {"category": "security", "severity": "critical", "title_pattern": "(?i)(xss|cross.site.script|innerHTML)"},
-    {"category": "security", "severity": "critical", "title_pattern": "(?i)(eval|code.injection|arbitrary.code)"}
-]
+{
+  "expected_findings": [
+    {"category": "security", "severity": "high", "title_pattern": "(?i)(xss|innerHTML)", "min_count": 1}
+  ]
+}

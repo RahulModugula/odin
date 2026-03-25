@@ -1,0 +1,28 @@
+{
+  "expected_findings": [
+    {
+      "category": "quality",
+      "severity": "medium",
+      "title_pattern": "any type",
+      "min_count": 2
+    },
+    {
+      "category": "security",
+      "severity": "high",
+      "title_pattern": "XSS|innerHTML",
+      "min_count": 1
+    },
+    {
+      "category": "quality",
+      "severity": "low",
+      "title_pattern": "console.log|console\\.debug",
+      "min_count": 1
+    },
+    {
+      "category": "quality",
+      "severity": "low",
+      "title_pattern": "var",
+      "min_count": 1
+    }
+  ]
+}

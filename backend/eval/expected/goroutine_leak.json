@@ -1,0 +1,6 @@
+{
+  "expected_findings": [
+    {"category": "quality",  "severity": "info", "title_pattern": "TODO|FIXME",  "min_count": 1},
+    {"category": "security", "severity": "high", "title_pattern": "hardcoded|credential", "min_count": 1}
+  ]
+}
