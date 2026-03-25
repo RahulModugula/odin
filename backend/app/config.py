@@ -35,5 +35,24 @@ class Settings(BaseSettings):
     environment: str = "development"
     port: int = 8000
 
+    # Provider configuration
+    llm_provider: str = "default"  # "lmstudio" | "openrouter" | "openai" | "ollama" | "default"
+    lmstudio_base_url: str = "http://localhost:1234/v1"
+    lmstudio_model: str = "local-model"
+    openrouter_api_key: str = ""
+    openrouter_model: str = "anthropic/claude-sonnet-4-5"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    ollama_base_url: str = "http://localhost:11434/v1"
+    ollama_model: str = "qwen2.5-coder"
+
+    # Rules engine
+    rules_enabled: bool = True
+    rules_complexity_threshold: int = 10
+    rules_function_length_threshold: int = 50
+    rules_nesting_depth_threshold: int = 4
+
+    # Review store TTL (seconds)
+    review_store_ttl: int = 2_592_000  # 30 days
+
 
 settings = Settings()

@@ -1,0 +1,9 @@
+# Override for LM Studio users
+# Usage: docker compose -f docker-compose.yml -f docker-compose.lmstudio.yml up
+services:
+  backend:
+    environment:
+      - ODIN_LLM_PROVIDER=lmstudio
+      - ODIN_LMSTUDIO_BASE_URL=http://host.docker.internal:1234/v1
+      - ODIN_LMSTUDIO_MODEL=local-model
+      - ODIN_LLM_API_KEY=lm-studio
