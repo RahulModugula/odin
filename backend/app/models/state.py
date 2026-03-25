@@ -27,3 +27,6 @@ class AgentInput(TypedDict):
     ast_summary: str
     metrics: CodeMetrics
     codebase_context: str
+    diff: NotRequired[str]  # unified diff patch — agents focus on changed lines
+    changed_lines: NotRequired[list[tuple[int, int]]]  # [(start, end), ...]
+    pr_context: NotRequired[dict]  # PR title, description, author

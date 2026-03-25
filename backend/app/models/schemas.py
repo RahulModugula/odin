@@ -55,6 +55,8 @@ class Finding(BaseModel):
     line_start: int | None = None
     line_end: int | None = None
     suggestion: str | None = None
+    fix_code: str | None = None  # concrete code fix (posted as GitHub suggestion block)
+    attack_scenario: str | None = None  # "an attacker can... to achieve..."
     confidence: float = Field(ge=0.0, le=1.0, default=0.8)
     source: str | None = None  # "rule" | "ai"
 

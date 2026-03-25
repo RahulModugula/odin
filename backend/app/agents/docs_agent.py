@@ -45,6 +45,9 @@ async def run_docs_agent(
             state["language"],
             state["ast_summary"],
             state.get("codebase_context", ""),
+            diff=state.get("diff", ""),
+            changed_lines=state.get("changed_lines"),
+            pr_context=state.get("pr_context"),
         )
         messages = [
             SystemMessage(content=DOCS_SYSTEM_PROMPT),
@@ -62,6 +65,7 @@ async def run_docs_agent(
                 line_end=f.line_end,
                 suggestion=f.suggestion,
                 confidence=f.confidence,
+                source="ai",
             )
             for f in result.findings
         ]

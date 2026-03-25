@@ -296,9 +296,30 @@ def _build_inline_comments(
             "",
             finding.description,
         ]
-        if finding.suggestion:
+
+        # Attack scenario — the "awe" part: show how this gets exploited
+        if finding.attack_scenario:
+            body_parts.extend([
+                "",
+                "<details>",
+                "<summary>⚠️ Attack scenario</summary>",
+                "",
+                finding.attack_scenario,
+                "</details>",
+            ])
+
+        # Fix code as a GitHub suggestion block (1-click apply)
+        if finding.fix_code:
+            body_parts.extend([
+                "",
+                "```suggestion",
+                finding.fix_code,
+                "```",
+            ])
+        elif finding.suggestion:
             body_parts.extend(["", f"> 💡 **Suggestion:** {finding.suggestion}"])
-        body_parts.extend(["", f"*Confidence: {finding.confidence:.0%}*"])
+
+        body_parts.extend(["", f"*Confidence: {finding.confidence:.0%} · [Odin](https://github.com/RahulModugula/odin)*"])
 
         comments.append(
             {

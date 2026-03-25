@@ -1,6 +1,24 @@
 import { useState } from 'react';
 import type { Finding } from '../types';
 
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <button
+      onClick={copy}
+      className="text-[10px] text-gray-500 hover:text-gray-300 px-1.5 py-0.5 rounded transition-colors"
+    >
+      {copied ? '✓ Copied' : 'Copy'}
+    </button>
+  );
+}
+
 interface FindingCardProps {
   finding: Finding;
 }
@@ -66,12 +84,36 @@ export function FindingCard({ finding }: FindingCardProps) {
       <h4 className="text-sm font-semibold text-gray-100">{finding.title}</h4>
       <p className="text-sm text-gray-400 leading-relaxed">{finding.description}</p>
 
-      {finding.suggestion && (
+      {/* Attack scenario — what an attacker actually does */}
+      {finding.attack_scenario && (
+        <details className="group">
+          <summary className="cursor-pointer text-xs font-medium text-amber-400 hover:text-amber-300 flex items-center gap-1 select-none">
+            <span className="group-open:rotate-90 transition-transform inline-block">▶</span>
+            ⚠️ Attack scenario
+          </summary>
+          <div className="mt-2 bg-amber-950/20 border border-amber-500/15 rounded-md px-3 py-2.5">
+            <p className="text-xs text-amber-200/80 leading-relaxed">{finding.attack_scenario}</p>
+          </div>
+        </details>
+      )}
+
+      {/* Fix code block — copy-paste fix */}
+      {finding.fix_code ? (
+        <div className="bg-emerald-950/20 border border-emerald-500/15 rounded-md overflow-hidden">
+          <div className="flex items-center justify-between px-3 py-1.5 border-b border-emerald-500/10">
+            <p className="text-[10px] font-medium text-emerald-400">✅ Suggested fix</p>
+            <CopyButton text={finding.fix_code} />
+          </div>
+          <pre className="px-3 py-2.5 text-xs text-emerald-100/90 overflow-x-auto font-mono leading-relaxed">
+            {finding.fix_code}
+          </pre>
+        </div>
+      ) : finding.suggestion ? (
         <div className="bg-indigo-950/30 border border-indigo-500/15 rounded-md px-3 py-2.5">
           <p className="text-xs font-medium text-indigo-300 mb-1">💡 Suggestion</p>
           <p className="text-sm text-gray-300 leading-relaxed">{finding.suggestion}</p>
         </div>
-      )}
+      ) : null}
 
       <div className="flex items-center justify-between pt-0.5">
         <div className="text-[10px] text-gray-600 font-medium">

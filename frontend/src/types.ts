@@ -6,6 +6,8 @@ export interface Finding {
   line_start?: number | null;
   line_end?: number | null;
   suggestion?: string | null;
+  fix_code?: string | null;
+  attack_scenario?: string | null;
   confidence: number;
   source?: 'rule' | 'ai' | null;
 }

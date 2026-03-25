@@ -78,13 +78,20 @@ def run_rules_node(state: ReviewState) -> dict:  # type: ignore[type-arg]
 
 def fan_out_to_agents(state: ReviewState) -> list[Send]:
     """Fan out to all three review agents and the rules engine in parallel."""
-    agent_input = {
+    agent_input: dict = {
         "code": state["code"],
         "language": state["language"],
         "ast_summary": state["ast_summary"],
         "metrics": state["metrics"],
         "codebase_context": state.get("codebase_context", ""),
     }
+    # Pass PR context so agents focus analysis on changed lines only
+    if "diff" in state and state["diff"]:
+        agent_input["diff"] = state["diff"]
+    if "changed_lines" in state and state["changed_lines"]:
+        agent_input["changed_lines"] = state["changed_lines"]
+    if "pr_context" in state and state["pr_context"]:
+        agent_input["pr_context"] = state["pr_context"]
     return [
         Send("quality_agent", agent_input),
         Send("security_agent", agent_input),

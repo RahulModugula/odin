@@ -14,7 +14,7 @@ logger = structlog.get_logger()
 
 
 class SecurityFinding(BaseModel):
-    """A single security finding."""
+    """A single security finding with attack scenario and fix."""
 
     severity: Severity
     title: str
@@ -22,6 +22,8 @@ class SecurityFinding(BaseModel):
     line_start: int | None = None
     line_end: int | None = None
     suggestion: str | None = None
+    fix_code: str | None = None  # drop-in replacement code
+    attack_scenario: str | None = None  # concrete exploitation path
     confidence: float = Field(ge=0.0, le=1.0, default=0.85)
 
 
@@ -45,6 +47,9 @@ async def run_security_agent(
             state["language"],
             state["ast_summary"],
             state.get("codebase_context", ""),
+            diff=state.get("diff", ""),
+            changed_lines=state.get("changed_lines"),
+            pr_context=state.get("pr_context"),
         )
         messages = [
             SystemMessage(content=SECURITY_SYSTEM_PROMPT),
@@ -61,7 +66,10 @@ async def run_security_agent(
                 line_start=f.line_start,
                 line_end=f.line_end,
                 suggestion=f.suggestion,
+                fix_code=f.fix_code,
+                attack_scenario=f.attack_scenario,
                 confidence=f.confidence,
+                source="ai",
             )
             for f in result.findings
         ]

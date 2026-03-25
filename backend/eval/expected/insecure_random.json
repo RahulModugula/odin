@@ -1,0 +1,5 @@
+{
+  "expected_findings": [
+    {"category": "security", "severity": "medium", "title_pattern": "prng|random|weak|crypto", "min_count": 1}
+  ]
+}
