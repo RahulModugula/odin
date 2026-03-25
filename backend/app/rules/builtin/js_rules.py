@@ -43,8 +43,7 @@ class NoVarRule(Rule):
                         line_start=i,
                         line_end=i,
                         suggestion=(
-                            "Use `const` for values that don't change, "
-                            "`let` for those that do."
+                            "Use `const` for values that don't change, `let` for those that do."
                         ),
                         confidence=0.9,
                     )
@@ -96,9 +95,7 @@ class XSSPatternRule(Rule):
     category = Category.SECURITY
     languages = [Language.JAVASCRIPT, Language.TYPESCRIPT]
 
-    _pattern = re.compile(
-        r"\.(innerHTML|outerHTML)\s*=|dangerouslySetInnerHTML\s*=\s*\{"
-    )
+    _pattern = re.compile(r"\.(innerHTML|outerHTML)\s*=|dangerouslySetInnerHTML\s*=\s*\{")
 
     def check(
         self,
@@ -212,10 +209,148 @@ class CallbackNestingRule(Rule):
         return findings
 
 
+class JWTMisuseRule(Rule):
+    """JS005 — jwt.decode() used without jwt.verify(), or missing algorithm whitelist."""
+
+    id = "JS005"
+    name = "Insecure JWT handling"
+    severity = Severity.HIGH
+    category = Category.SECURITY
+    languages = [Language.JAVASCRIPT, Language.TYPESCRIPT]
+
+    _DECODE_NO_VERIFY = re.compile(r"\bjwt\.decode\s*\(")
+    _VERIFY = re.compile(r"\bjwt\.verify\s*\(")
+    _ALGORITHMS_OPT = re.compile(r"algorithms\s*:\s*\[")
+
+    def check(
+        self,
+        code: str,
+        language: Language,
+        tree: object = None,
+        structure: object = None,
+    ) -> list[Finding]:
+        findings: list[Finding] = []
+
+        for i, line in enumerate(code.splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("//") or stripped.startswith("*"):
+                continue
+
+            # jwt.decode() without a nearby jwt.verify() is dangerous
+            if self._DECODE_NO_VERIFY.search(line) and not self._VERIFY.search(code):
+                    findings.append(
+                        Finding(
+                            severity=self.severity,
+                            category=self.category,
+                            title="`jwt.decode()` skips signature verification",
+                            description=(
+                                f"Line {i}: `jwt.decode()` does not verify the token signature. "
+                                "Any claims in the payload can be forged. CWE-347."
+                            ),
+                            line_start=i,
+                            line_end=i,
+                            suggestion=(
+                                "Use `jwt.verify(token, secret, {{ algorithms: ['HS256'] }})` "
+                                "instead. Never trust payload data from `jwt.decode()`."
+                            ),
+                            confidence=0.9,
+                        )
+                    )
+
+            # jwt.verify() without algorithms option is vulnerable to algorithm confusion
+            if self._VERIFY.search(line) and not self._ALGORITHMS_OPT.search(code):
+                findings.append(
+                    Finding(
+                        severity=Severity.MEDIUM,
+                        category=self.category,
+                        title="JWT verify missing explicit `algorithms` whitelist",
+                        description=(
+                            f"Line {i}: `jwt.verify()` without `algorithms: ['RS256']` (or "
+                            "similar) allows algorithm-confusion attacks — an attacker can "
+                            "switch to `alg:none` or HS256 with the public key. CWE-347."
+                        ),
+                        line_start=i,
+                        line_end=i,
+                        suggestion=(
+                            "Always specify `{{ algorithms: ['RS256'] }}` (or your actual "
+                            "algorithm) in the options object passed to `jwt.verify()`."
+                        ),
+                        confidence=0.75,
+                    )
+                )
+
+        return findings
+
+
+class PrototypePollutionRule(Rule):
+    """JS006 — recursive merge / path-based assignment without __proto__ guard."""
+
+    id = "JS006"
+    name = "Prototype pollution risk"
+    severity = Severity.HIGH
+    category = Category.SECURITY
+    languages = [Language.JAVASCRIPT, Language.TYPESCRIPT]
+
+    # Dynamic property assignment by path (e.g. obj[key] = val inside a loop)
+    _BRACKET_ASSIGN = re.compile(r"\w+\[(\w+)\]\s*=")
+    # Recursive merge pattern: target[key] = source[key] inside a function
+    _MERGE_PATTERN = re.compile(r"(target|dest|obj|result)\[(\w+)\]\s*=\s*(source|src|from)\[")
+    # Guard: an if-statement that checks for __proto__ / constructor / prototype keys
+    _PROTO_GUARD = re.compile(
+        r"===\s*['\"]__proto__['\"]|===\s*['\"]constructor['\"]|"
+        r"===\s*['\"]prototype['\"]|"
+        r"if\s*\([^)]*(__proto__|constructor)[^)]*\)"
+    )
+
+    def check(
+        self,
+        code: str,
+        language: Language,
+        tree: object = None,
+        structure: object = None,
+    ) -> list[Finding]:
+        findings: list[Finding] = []
+
+        # Skip if the code already has prototype guards (conditional checks)
+        if self._PROTO_GUARD.search(code):
+            return []
+
+        for i, line in enumerate(code.splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("//") or stripped.startswith("*"):
+                continue
+
+            if self._MERGE_PATTERN.search(line):
+                findings.append(
+                    Finding(
+                        severity=self.severity,
+                        category=self.category,
+                        title="Prototype pollution — unguarded object merge",
+                        description=(
+                            f"Line {i}: Object merge copies properties without checking for "
+                            "`__proto__`, `constructor`, or `prototype` keys. An attacker can "
+                            "poison `Object.prototype` for all objects in the process. CWE-1321."
+                        ),
+                        line_start=i,
+                        line_end=i,
+                        suggestion=(
+                            "Add a key guard: `if (key === '__proto__' || key === 'constructor' "
+                            "|| key === 'prototype') continue;`. "
+                            "Or use `Object.assign({}, ...)` with structuredClone for deep copies."
+                        ),
+                        confidence=0.8,
+                    )
+                )
+
+        return findings
+
+
 ALL_RULES: list[Rule] = [
     NoVarRule(),
     ConsoleLogRule(),
     XSSPatternRule(),
     NoAnyTypeRule(),
     CallbackNestingRule(),
+    JWTMisuseRule(),
+    PrototypePollutionRule(),
 ]

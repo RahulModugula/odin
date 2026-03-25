@@ -22,7 +22,9 @@ def _make_signature(payload: bytes, secret: str = SECRET) -> str:
     return "sha256=" + hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
 
 
-def _pr_payload(action: str = "opened", repo: str = "alice/myrepo", number: int = 42, sha: str = "abc123") -> bytes:
+def _pr_payload(
+    action: str = "opened", repo: str = "alice/myrepo", number: int = 42, sha: str = "abc123"
+) -> bytes:
     return json.dumps(
         {
             "action": action,
@@ -59,7 +61,9 @@ def test_verify_signature_wrong_prefix() -> None:
 def test_verify_signature_uses_compare_digest() -> None:
     """Ensures constant-time comparison is used (not ==)."""
     import inspect
+
     import app.api.webhook as webhook_module
+
     source = inspect.getsource(webhook_module.verify_github_signature)
     assert "compare_digest" in source
 

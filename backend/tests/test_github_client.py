@@ -85,11 +85,14 @@ async def test_get_file_content_decodes_base64() -> None:
 
     with respx.mock:
         respx.get(f"{GITHUB_BASE}/repos/{OWNER}/{REPO}/contents/src/main.py").mock(
-            return_value=Response(200, json={
-                "content": encoded,
-                "encoding": "base64",
-                "size": len(source),
-            })
+            return_value=Response(
+                200,
+                json={
+                    "content": encoded,
+                    "encoding": "base64",
+                    "size": len(source),
+                },
+            )
         )
         result = await get_file_content(OWNER, REPO, REF, "src/main.py")
 
@@ -114,11 +117,14 @@ async def test_get_file_content_skips_large_files(monkeypatch: pytest.MonkeyPatc
 
     with respx.mock:
         respx.get(f"{GITHUB_BASE}/repos/{OWNER}/{REPO}/contents/big.py").mock(
-            return_value=Response(200, json={
-                "content": encoded,
-                "encoding": "base64",
-                "size": 200,  # exceeds 100-byte limit
-            })
+            return_value=Response(
+                200,
+                json={
+                    "content": encoded,
+                    "encoding": "base64",
+                    "size": 200,  # exceeds 100-byte limit
+                },
+            )
         )
         result = await get_file_content(OWNER, REPO, REF, "big.py")
 
@@ -131,11 +137,14 @@ async def test_get_file_content_skips_binary_files() -> None:
 
     with respx.mock:
         respx.get(f"{GITHUB_BASE}/repos/{OWNER}/{REPO}/contents/image.py").mock(
-            return_value=Response(200, json={
-                "content": binary_encoded,
-                "encoding": "base64",
-                "size": 10,
-            })
+            return_value=Response(
+                200,
+                json={
+                    "content": binary_encoded,
+                    "encoding": "base64",
+                    "size": 10,
+                },
+            )
         )
         result = await get_file_content(OWNER, REPO, REF, "image.py")
 
@@ -154,7 +163,9 @@ async def test_create_pr_review_posts_correct_payload() -> None:
             return_value=Response(200, json=expected_response)
         )
         result = await create_pr_review(
-            OWNER, REPO, PR,
+            OWNER,
+            REPO,
+            PR,
             commit_sha="abc123",
             body="## Odin Review",
             comments=[{"path": "main.py", "line": 10, "side": "RIGHT", "body": "issue"}],
@@ -163,6 +174,7 @@ async def test_create_pr_review_posts_correct_payload() -> None:
     assert result == expected_response
     request_body = route.calls.last.request
     import json
+
     payload = json.loads(request_body.content)
     assert payload["event"] == "COMMENT"
     assert payload["commit_id"] == "abc123"

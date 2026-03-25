@@ -1,4 +1,5 @@
 """PR-level summary agent — generates walkthrough and change summary."""
+
 import json
 
 import structlog

@@ -14,21 +14,23 @@ from app.services.webhook_processor import (
     should_skip_file,
 )
 
-
 # ── Language detection ───────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize("filename,expected", [
-    ("app/main.py", Language.PYTHON),
-    ("src/index.js", Language.JAVASCRIPT),
-    ("src/App.jsx", Language.JAVASCRIPT),
-    ("src/App.tsx", Language.TYPESCRIPT),
-    ("src/types.ts", Language.TYPESCRIPT),
-    ("server/main.go", Language.GO),
-    ("README.md", None),
-    ("Dockerfile", None),
-    ("data.json", None),
-])
+@pytest.mark.parametrize(
+    "filename,expected",
+    [
+        ("app/main.py", Language.PYTHON),
+        ("src/index.js", Language.JAVASCRIPT),
+        ("src/App.jsx", Language.JAVASCRIPT),
+        ("src/App.tsx", Language.TYPESCRIPT),
+        ("src/types.ts", Language.TYPESCRIPT),
+        ("server/main.go", Language.GO),
+        ("README.md", None),
+        ("Dockerfile", None),
+        ("data.json", None),
+    ],
+)
 def test_detect_language(filename: str, expected: Language | None) -> None:
     assert detect_language(filename) == expected
 
@@ -48,15 +50,18 @@ def test_skip_unsupported_extension() -> None:
     assert should_skip_file("main.rb", "modified") is True
 
 
-@pytest.mark.parametrize("filename", [
-    "package-lock.json",
-    "yarn.lock",
-    "pnpm-lock.yaml",
-    "poetry.lock",
-    "go.sum",
-    "Cargo.lock",
-    "go.mod",
-])
+@pytest.mark.parametrize(
+    "filename",
+    [
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "poetry.lock",
+        "go.sum",
+        "Cargo.lock",
+        "go.mod",
+    ],
+)
 def test_skip_lock_files(filename: str) -> None:
     assert should_skip_file(filename, "modified") is True
 
@@ -86,10 +91,15 @@ def test_does_not_skip_valid_typescript_added() -> None:
 
 def _make_metrics() -> CodeMetrics:
     return CodeMetrics(
-        lines_of_code=50, num_functions=3, num_classes=1,
-        avg_function_length=10.0, max_function_length=20,
-        max_nesting_depth=2, cyclomatic_complexity=5,
-        comment_ratio=0.1, import_count=3,
+        lines_of_code=50,
+        num_functions=3,
+        num_classes=1,
+        avg_function_length=10.0,
+        max_function_length=20,
+        max_nesting_depth=2,
+        cyclomatic_complexity=5,
+        comment_ratio=0.1,
+        import_count=3,
     )
 
 
@@ -216,9 +226,19 @@ async def test_process_pr_webhook_no_qualifying_files(monkeypatch: pytest.Monkey
     pr_files = [{"filename": "yarn.lock", "status": "modified", "changes": 5}]
 
     with (
-        patch("app.services.webhook_processor.get_pr_files", new_callable=AsyncMock, return_value=pr_files),
-        patch("app.services.webhook_processor.get_pr_details", new_callable=AsyncMock, return_value={"title": "test", "body": ""}),
-        patch("app.services.webhook_processor.create_pr_review", new_callable=AsyncMock) as mock_post,
+        patch(
+            "app.services.webhook_processor.get_pr_files",
+            new_callable=AsyncMock,
+            return_value=pr_files,
+        ),
+        patch(
+            "app.services.webhook_processor.get_pr_details",
+            new_callable=AsyncMock,
+            return_value={"title": "test", "body": ""},
+        ),
+        patch(
+            "app.services.webhook_processor.create_pr_review", new_callable=AsyncMock
+        ) as mock_post,
     ):
         await process_pr_webhook("alice", "repo", 1, "sha123")
 

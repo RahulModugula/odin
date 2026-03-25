@@ -1,0 +1,6 @@
+{
+  "expected_findings": [
+    {"category": "security", "severity": "critical", "title_pattern": "pickle|deserializ", "min_count": 1},
+    {"category": "security", "severity": "critical", "title_pattern": "pickle|deserializ|yaml", "min_count": 2}
+  ]
+}

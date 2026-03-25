@@ -1,4 +1,5 @@
 """Quality gate evaluation — pass/fail criteria for PR reviews."""
+
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -27,12 +28,8 @@ def evaluate(results: list["ReviewResult"], config: QualityGateConfig) -> Qualit
         return QualityGateResult(passed=True, score=100, reasons=[])
 
     total_score = sum(r.overall_score for r in results) // len(results)
-    critical_count = sum(
-        1 for r in results for f in r.findings if f.severity.value == "critical"
-    )
-    high_count = sum(
-        1 for r in results for f in r.findings if f.severity.value == "high"
-    )
+    critical_count = sum(1 for r in results for f in r.findings if f.severity.value == "critical")
+    high_count = sum(1 for r in results for f in r.findings if f.severity.value == "high")
 
     reasons = []
     passed = True

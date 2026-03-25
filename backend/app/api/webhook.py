@@ -57,9 +57,7 @@ def verify_github_signature(payload: bytes, sig_header: str | None, secret: str)
     """
     if not sig_header or not sig_header.startswith("sha256="):
         return False
-    expected = "sha256=" + hmac.new(
-        secret.encode(), payload, hashlib.sha256
-    ).hexdigest()
+    expected = "sha256=" + hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, sig_header)
 
 
@@ -82,13 +80,17 @@ async def _handle_bot_comment(
     if "review" in body_lower:
         if not is_pull_request:
             await post_issue_comment(
-                owner, repo, issue_number,
+                owner,
+                repo,
+                issue_number,
                 "Sorry, I can only review pull requests, not plain issues.",
             )
             return
 
         await post_issue_comment(
-            owner, repo, issue_number,
+            owner,
+            repo,
+            issue_number,
             "Starting a fresh review — I'll post the results shortly.",
         )
         # Fetch the PR head SHA and kick off a new review
@@ -97,6 +99,7 @@ async def _handle_bot_comment(
             import httpx
 
             from app.services.github_client import GITHUB_API_BASE, _auth_headers
+
             async with httpx.AsyncClient() as client:
                 resp = await client.get(
                     f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{issue_number}",
@@ -108,14 +111,18 @@ async def _handle_bot_comment(
         except Exception as exc:
             logger.error("re-review triggered by bot comment failed", error=str(exc))
             await post_issue_comment(
-                owner, repo, issue_number,
+                owner,
+                repo,
+                issue_number,
                 "Sorry, I ran into an error while trying to re-review this PR.",
             )
         return
 
     # Generic question — give a brief helpful reply
     await post_issue_comment(
-        owner, repo, issue_number,
+        owner,
+        repo,
+        issue_number,
         (
             "Hi! I'm Odin, an AI code review bot. "
             "You can mention `@odin review` to trigger a fresh code review on this PR."

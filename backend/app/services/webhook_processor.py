@@ -87,7 +87,7 @@ def _parse_changed_lines(patch: str | None) -> list[tuple[int, int]]:
     for line in patch.splitlines():
         if line.startswith("@@"):
             # Parse @@ -old_start,old_count +new_start,new_count @@
-            m = re.search(r'\+(\d+)(?:,(\d+))?', line)
+            m = re.search(r"\+(\d+)(?:,(\d+))?", line)
             if m:
                 start = int(m.group(1))
                 count = int(m.group(2)) if m.group(2) else 1
@@ -145,8 +145,11 @@ async def _review_single_file(
 
 def _severity_sort_key(s: Severity) -> int:
     order = {
-        Severity.CRITICAL: 0, Severity.HIGH: 1, Severity.MEDIUM: 2,
-        Severity.LOW: 3, Severity.INFO: 4,
+        Severity.CRITICAL: 0,
+        Severity.HIGH: 1,
+        Severity.MEDIUM: 2,
+        Severity.LOW: 3,
+        Severity.INFO: 4,
     }
     return order.get(s, 99)
 
@@ -168,8 +171,13 @@ def _build_review_body(
         risk = pr_summary.get("risk", "medium")
         risk_emoji = {"low": "🟢", "medium": "🟡", "high": "🔴"}.get(risk, "🟡")
         type_emoji = {
-            "feature": "✨", "bugfix": "🐛", "refactor": "♻️", "docs": "📚",
-            "tests": "🧪", "security": "🔒", "chore": "🔧",
+            "feature": "✨",
+            "bugfix": "🐛",
+            "refactor": "♻️",
+            "docs": "📚",
+            "tests": "🧪",
+            "security": "🔒",
+            "chore": "🔧",
         }.get(change_type, "📦")
 
         lines.append(f"### {type_emoji} Summary")
@@ -239,7 +247,11 @@ def _build_review_body(
         lines.append("<summary>📝 General Findings</summary>\n")
         for filename, finding in general_findings[:10]:
             severity_emoji = {
-                "critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵", "info": "⚪",
+                "critical": "🔴",
+                "high": "🟠",
+                "medium": "🟡",
+                "low": "🔵",
+                "info": "⚪",
             }.get(finding.severity.value, "⚪")
             lines.append(f"**`{filename}`** {severity_emoji} **{finding.title}**")
             lines.append(f"\n{finding.description}\n")
@@ -271,7 +283,11 @@ def _build_inline_comments(
             continue
 
         severity_emoji = {
-            "critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵", "info": "⚪",
+            "critical": "🔴",
+            "high": "🟠",
+            "medium": "🟡",
+            "low": "🔵",
+            "info": "⚪",
         }.get(finding.severity.value, "⚪")
         category = finding.category.value.upper()
 
@@ -325,16 +341,16 @@ async def process_pr_webhook(
         return
 
     # Filter to qualifying files
-    qualifying = [
-        f for f in pr_files
-        if not should_skip_file(f["filename"], f.get("status", ""))
-    ]
+    qualifying = [f for f in pr_files if not should_skip_file(f["filename"], f.get("status", ""))]
 
     if not qualifying:
         log.info("no qualifying files to review")
         try:
             await create_pr_review(
-                owner, repo, pull_number, head_sha,
+                owner,
+                repo,
+                pull_number,
+                head_sha,
                 body=(
                     "## Odin Code Review\n\n"
                     "No files in supported languages (Python, JavaScript, TypeScript, Go) "
@@ -372,7 +388,9 @@ async def process_pr_webhook(
     # Fan out: review all files concurrently, passing diff context
     tasks = [
         _review_single_file(
-            owner, repo, head_sha,
+            owner,
+            repo,
+            head_sha,
             f["filename"],
             detect_language(f["filename"]),  # type: ignore[arg-type]
             patch=f.get("patch"),
@@ -383,8 +401,7 @@ async def process_pr_webhook(
     results: list[ReviewResult | None] = await asyncio.gather(*tasks)
 
     file_results: list[tuple[str, ReviewResult | None]] = [
-        (f["filename"], result)
-        for f, result in zip(qualifying, results, strict=True)
+        (f["filename"], result) for f, result in zip(qualifying, results, strict=True)
     ]
 
     # Build review body with PR summary
@@ -407,7 +424,10 @@ async def process_pr_webhook(
 
     try:
         await create_pr_review(
-            owner, repo, pull_number, head_sha,
+            owner,
+            repo,
+            pull_number,
+            head_sha,
             body=review_body,
             comments=all_comments,
         )

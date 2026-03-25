@@ -26,8 +26,10 @@ class BareExceptRule(Rule):
         findings: list[Finding] = []
         for i, line in enumerate(code.splitlines(), 1):
             stripped = line.strip()
-            if stripped == "except:" or stripped.startswith("except:  ") or stripped.startswith(
-                "except: #"
+            if (
+                stripped == "except:"
+                or stripped.startswith("except:  ")
+                or stripped.startswith("except: #")
             ):
                 findings.append(
                     Finding(
@@ -148,9 +150,7 @@ class HardcodedSecretsRule(Rule):
             r"(?i)(password|passwd|pwd|secret|api_key|apikey|token|auth_token|access_token)"
             r'\s*=\s*["\'][^"\']{8,}["\']'
         ),
-        re.compile(
-            r'(?i)(aws_access_key_id|aws_secret_access_key)\s*=\s*["\'][^"\']+["\']'
-        ),
+        re.compile(r'(?i)(aws_access_key_id|aws_secret_access_key)\s*=\s*["\'][^"\']+["\']'),
         re.compile(r"sk-[a-zA-Z0-9]{20,}"),  # OpenAI-style keys
         re.compile(r"ghp_[a-zA-Z0-9]{36}"),  # GitHub tokens
     ]
@@ -392,6 +392,335 @@ class MissingTypeHintsRule(Rule):
         return findings
 
 
+class UnsafeDeserializationRule(Rule):
+    """PY010 — pickle.loads / yaml.load on any input is a code-execution risk."""
+
+    id = "PY010"
+    name = "Unsafe deserialization"
+    severity = Severity.CRITICAL
+    category = Category.SECURITY
+    languages = [Language.PYTHON]
+
+    _PATTERNS = [
+        re.compile(r"\bpickle\.loads?\s*\("),
+        re.compile(r"\byaml\.load\s*\((?!.*Loader\s*=\s*yaml\.SafeLoader)"),
+        re.compile(r"\bshelve\.open\s*\("),
+        re.compile(r"\bjsonpickle\.decode\s*\("),
+        re.compile(r"\bdill\.loads?\s*\("),
+    ]
+
+    def check(
+        self,
+        code: str,
+        language: Language,
+        tree: object = None,
+        structure: object = None,
+    ) -> list[Finding]:
+        findings: list[Finding] = []
+        for i, line in enumerate(code.splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            for pat in self._PATTERNS:
+                if pat.search(line):
+                    name = (
+                        "pickle.loads"
+                        if "pickle" in line
+                        else pat.pattern.split(r"\b")[1].split(r"\s")[0]
+                    )
+                    findings.append(
+                        Finding(
+                            severity=self.severity,
+                            category=self.category,
+                            title="Unsafe deserialization (pickle / yaml.load)",
+                            description=(
+                                f"Line {i}: Deserializing untrusted data with `{name}` allows "
+                                "arbitrary code execution. CWE-502."
+                            ),
+                            line_start=i,
+                            line_end=i,
+                            suggestion=(
+                                "Use `json.loads` for data exchange. If you must use pickle, "
+                                "only deserialize data you signed with HMAC. For YAML use "
+                                "`yaml.safe_load()`."
+                            ),
+                            confidence=0.9,
+                        )
+                    )
+                    break
+        return findings
+
+
+class CommandInjectionRule(Rule):
+    """PY011 — subprocess / os.system with shell=True and string interpolation."""
+
+    id = "PY011"
+    name = "OS command injection"
+    severity = Severity.CRITICAL
+    category = Category.SECURITY
+    languages = [Language.PYTHON]
+
+    # shell=True with a non-literal command string
+    _SHELL_TRUE = re.compile(r"\bsubprocess\.(run|call|Popen|check_output|check_call)\s*\(")
+    _SHELL_FLAG = re.compile(r"shell\s*=\s*True")
+    _OS_SYSTEM = re.compile(r"\bos\.(system|popen)\s*\(")
+    _INTERP = re.compile(r'["\'].*\{|f["\']|%\s*[a-zA-Z(]|\+\s*[a-zA-Z_]')
+
+    def check(
+        self,
+        code: str,
+        language: Language,
+        tree: object = None,
+        structure: object = None,
+    ) -> list[Finding]:
+        findings: list[Finding] = []
+        lines = code.splitlines()
+
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+
+            # os.system / os.popen with any non-literal arg
+            if self._OS_SYSTEM.search(line) and self._INTERP.search(line):
+                findings.append(
+                    Finding(
+                        severity=self.severity,
+                        category=self.category,
+                        title="OS command injection via os.system / os.popen",
+                        description=(
+                            f"Line {i}: `os.system`/`os.popen` with a dynamic string argument "
+                            "allows shell metacharacters to inject commands. CWE-78."
+                        ),
+                        line_start=i,
+                        line_end=i,
+                        suggestion=(
+                            "Use `subprocess.run([...])` with a list (no `shell=True`) "
+                            "to avoid shell interpretation."
+                        ),
+                        confidence=0.88,
+                    )
+                )
+                continue
+
+            # subprocess(..., shell=True) — check this line and the next 5 for shell=True
+            if self._SHELL_TRUE.search(line):
+                window = "\n".join(lines[i - 1 : min(i + 5, len(lines))])
+                if self._SHELL_FLAG.search(window) and self._INTERP.search(window):
+                    findings.append(
+                        Finding(
+                            severity=self.severity,
+                            category=self.category,
+                            title="Command injection via subprocess shell=True",
+                            description=(
+                                f"Line {i}: `subprocess` called with `shell=True` and a dynamic "
+                                "command string. Shell metacharacters in user input will be "
+                                "interpreted by the shell. CWE-78."
+                            ),
+                            line_start=i,
+                            line_end=i,
+                            suggestion=(
+                                "Pass a list to subprocess.run: "
+                                "`subprocess.run(['ping', '-c', '1', host])` — never `shell=True` "
+                                "with user-controlled input."
+                            ),
+                            confidence=0.9,
+                        )
+                    )
+
+        return findings
+
+
+class InsecureRandomRule(Rule):
+    """PY012 — random module used in a security-sensitive context."""
+
+    id = "PY012"
+    name = "Insecure PRNG for security token"
+    severity = Severity.MEDIUM
+    category = Category.SECURITY
+    languages = [Language.PYTHON]
+
+    _RANDOM_CALL = re.compile(
+        r"\brandom\.(random|randint|randrange|choice|choices|sample|uniform)\s*\("
+    )
+    # Function/variable names that suggest security-sensitive use
+    _SENSITIVE_CTX = re.compile(
+        r"(?i)(token|secret|password|passwd|session|otp|nonce|salt|csrf|key|auth|pin|code)",
+        re.IGNORECASE,
+    )
+
+    def check(
+        self,
+        code: str,
+        language: Language,
+        tree: object = None,
+        structure: object = None,
+    ) -> list[Finding]:
+        findings: list[Finding] = []
+        lines = code.splitlines()
+
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#") or not self._RANDOM_CALL.search(line):
+                continue
+
+            # Check surrounding 10-line window for security-context names
+            window_start = max(0, i - 6)
+            window_end = min(len(lines), i + 5)
+            window = "\n".join(lines[window_start:window_end])
+
+            if self._SENSITIVE_CTX.search(window):
+                findings.append(
+                    Finding(
+                        severity=self.severity,
+                        category=self.category,
+                        title="Cryptographically weak PRNG used for security value",
+                        description=(
+                            f"Line {i}: `random` module functions use the Mersenne Twister "
+                            "which is not cryptographically secure. After ~624 observations "
+                            "the internal state is fully recoverable. CWE-338."
+                        ),
+                        line_start=i,
+                        line_end=i,
+                        suggestion=(
+                            "Use `secrets.token_hex(32)`, `secrets.token_urlsafe()`, or "
+                            "`os.urandom()` for security-sensitive random values."
+                        ),
+                        confidence=0.8,
+                    )
+                )
+
+        return findings
+
+
+class XXERule(Rule):
+    """PY013 — lxml / xml parsers configured to resolve external entities."""
+
+    id = "PY013"
+    name = "XML External Entity (XXE) injection"
+    severity = Severity.HIGH
+    category = Category.SECURITY
+    languages = [Language.PYTHON]
+
+    _XXE_PATTERNS = [
+        re.compile(r"XMLParser\s*\(.*resolve_entities\s*=\s*True"),
+        re.compile(r"etree\.parse\s*\((?!.*defusedxml)"),
+        re.compile(r"xml\.etree\.ElementTree\.(parse|fromstring)\s*\("),
+        re.compile(r"minidom\.parse\s*\("),
+        re.compile(r"sax\.parse\s*\("),
+    ]
+    _DEFUSED = re.compile(r"defusedxml|no_network\s*=\s*True|resolve_entities\s*=\s*False")
+
+    def check(
+        self,
+        code: str,
+        language: Language,
+        tree: object = None,
+        structure: object = None,
+    ) -> list[Finding]:
+        findings: list[Finding] = []
+
+        # If defusedxml is imported or resolve_entities=False is present, skip
+        if self._DEFUSED.search(code):
+            return []
+
+        for i, line in enumerate(code.splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            for pat in self._XXE_PATTERNS:
+                if pat.search(line):
+                    findings.append(
+                        Finding(
+                            severity=self.severity,
+                            category=self.category,
+                            title="Potential XML External Entity (XXE) injection",
+                            description=(
+                                f"Line {i}: XML parser may resolve external entities, enabling "
+                                "file disclosure (`file:///etc/passwd`) and SSRF. CWE-611."
+                            ),
+                            line_start=i,
+                            line_end=i,
+                            suggestion=(
+                                "Use `defusedxml` library, or set "
+                                "`XMLParser(resolve_entities=False, no_network=True)`. "
+                                "Standard `xml.etree.ElementTree` does not block "
+                                "billion-laughs DoS attacks."
+                            ),
+                            confidence=0.75,
+                        )
+                    )
+                    break
+
+        return findings
+
+
+class SSRFRule(Rule):
+    """PY014 — HTTP request with a user-controlled URL (potential SSRF)."""
+
+    id = "PY014"
+    name = "Potential Server-Side Request Forgery (SSRF)"
+    severity = Severity.HIGH
+    category = Category.SECURITY
+    languages = [Language.PYTHON]
+
+    _HTTP_CALL = re.compile(
+        r"\b(requests\.(get|post|put|delete|patch|head|request)|"
+        r"urllib\.request\.urlopen|"
+        r"httpx\.(get|post|put|delete|patch|AsyncClient)|"
+        r"aiohttp\.ClientSession\(\))\s*\("
+    )
+    # Input sources that indicate user-controlled data
+    _USER_INPUT = re.compile(
+        r"(?i)(request\.(args|form|json|data|get_json|cookies|headers|values|params)|"
+        r"input\s*\(|sys\.argv|os\.environ|getenv|flask\.request|"
+        r"form\[|params\[|body\[)"
+    )
+
+    def check(
+        self,
+        code: str,
+        language: Language,
+        tree: object = None,
+        structure: object = None,
+    ) -> list[Finding]:
+        findings: list[Finding] = []
+        lines = code.splitlines()
+
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("#") or not self._HTTP_CALL.search(line):
+                continue
+
+            # Check 15-line window before the HTTP call for user-input sources
+            window_start = max(0, i - 15)
+            window = "\n".join(lines[window_start:i])
+
+            if self._USER_INPUT.search(window):
+                findings.append(
+                    Finding(
+                        severity=self.severity,
+                        category=self.category,
+                        title="Potential SSRF — HTTP request with user-controlled URL",
+                        description=(
+                            f"Line {i}: An HTTP request is made with a URL that may originate "
+                            "from user input. An attacker can point this at internal services "
+                            "or cloud metadata endpoints (169.254.169.254). CWE-918."
+                        ),
+                        line_start=i,
+                        line_end=i,
+                        suggestion=(
+                            "Validate the URL against an explicit allowlist of hosts/schemes. "
+                            "Block private IP ranges (10.x, 172.16-31.x, 192.168.x, 169.254.x). "
+                            "Never pass raw user input to an HTTP client."
+                        ),
+                        confidence=0.75,
+                    )
+                )
+
+        return findings
+
+
 ALL_RULES: list[Rule] = [
     BareExceptRule(),
     MutableDefaultArgRule(),
@@ -402,4 +731,9 @@ ALL_RULES: list[Rule] = [
     FunctionLengthRule(),
     NestingDepthRule(),
     MissingTypeHintsRule(),
+    UnsafeDeserializationRule(),
+    CommandInjectionRule(),
+    InsecureRandomRule(),
+    XXERule(),
+    SSRFRule(),
 ]

@@ -227,9 +227,7 @@ async def stream_review(request: ReviewRequest) -> StreamingResponse:
                     finding_data = (
                         finding.model_dump() if hasattr(finding, "model_dump") else finding
                     )  # noqa: E501
-                    sse_data = json.dumps(
-                        {"type": "finding", "agent": name, "data": finding_data}
-                    )
+                    sse_data = json.dumps({"type": "finding", "agent": name, "data": finding_data})
                     yield f"data: {sse_data}\n\n"
 
                 sse_data = json.dumps(
@@ -271,9 +269,7 @@ async def stream_review(request: ReviewRequest) -> StreamingResponse:
                         language=request.language,
                         total_time_ms=0.0,
                     )
-                    await _try_cache_set(
-                        request.code, request.language.value, cached_result
-                    )
+                    await _try_cache_set(request.code, request.language.value, cached_result)
             except Exception:
                 pass
 
@@ -329,7 +325,9 @@ def _get_review_store(req: Request):  # type: ignore[return]
 
 @router.get("/reviews")
 async def list_reviews(
-    limit: int = 20, offset: int = 0, req: Request = None  # type: ignore[assignment]
+    limit: int = 20,
+    offset: int = 0,
+    req: Request = None,  # type: ignore[assignment]
 ) -> dict[str, object]:
     """List recent PR reviews."""
     store = _get_review_store(req)
@@ -339,7 +337,8 @@ async def list_reviews(
 
 @router.get("/reviews/{review_id}")
 async def get_review(
-    review_id: str, req: Request = None  # type: ignore[assignment]
+    review_id: str,
+    req: Request = None,  # type: ignore[assignment]
 ) -> dict[str, object]:
     """Get a specific review by ID."""
     store = _get_review_store(req)
@@ -362,7 +361,8 @@ class FeedbackRequest(BaseModel):
 
 @router.post("/feedback")
 async def submit_feedback(
-    request: FeedbackRequest, req: Request = None  # type: ignore[assignment]
+    request: FeedbackRequest,
+    req: Request = None,  # type: ignore[assignment]
 ) -> dict[str, object]:
     """Record user feedback on a finding."""
     redis = getattr(req.app.state, "redis", None) if req else None

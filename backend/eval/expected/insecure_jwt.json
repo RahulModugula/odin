@@ -1,0 +1,5 @@
+{
+  "expected_findings": [
+    {"category": "security", "severity": "high", "title_pattern": "jwt|token|verify|signature", "min_count": 1}
+  ]
+}

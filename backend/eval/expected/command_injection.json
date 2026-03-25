@@ -1,0 +1,6 @@
+{
+  "expected_findings": [
+    {"category": "security", "severity": "critical", "title_pattern": "command|injection|shell", "min_count": 1},
+    {"category": "security", "severity": "critical", "title_pattern": "command|injection|shell|os\\.system", "min_count": 2}
+  ]
+}

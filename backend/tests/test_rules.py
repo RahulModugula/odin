@@ -223,3 +223,106 @@ def test_quality_gate_fails_on_low_score() -> None:
     config = QualityGateConfig(min_score=70, max_critical=5)
     result = evaluate([_make_review_result(40)], config=config)
     assert not result.passed
+
+
+# ── PY010 UnsafeDeserialization ───────────────────────────────────────────────
+
+
+def test_unsafe_deserialization_pickle(engine: RuleEngine) -> None:
+    code = "import pickle\ndata = pickle.loads(user_bytes)\n"
+    findings = engine.check_all(code, Language.PYTHON)
+    assert any("pickle" in f.title.lower() or "deserializ" in f.title.lower() for f in findings)
+
+
+def test_unsafe_deserialization_yaml(engine: RuleEngine) -> None:
+    code = "import yaml\ndata = yaml.load(stream)\n"
+    findings = engine.check_all(code, Language.PYTHON)
+    assert any("yaml" in f.description.lower() or "deserializ" in f.title.lower() for f in findings)
+
+
+# ── PY011 CommandInjection ───────────────────────────────────────────────────
+
+
+def test_command_injection_subprocess(engine: RuleEngine) -> None:
+    code = 'import subprocess\nsubprocess.run(f"ls {user_input}", shell=True)\n'
+    findings = engine.check_all(code, Language.PYTHON)
+    assert any("command" in f.title.lower() or "injection" in f.title.lower() for f in findings)
+
+
+def test_command_injection_os_system(engine: RuleEngine) -> None:
+    code = 'import os\nos.system(f"echo {user_input}")\n'
+    findings = engine.check_all(code, Language.PYTHON)
+    assert any("command" in f.title.lower() or "injection" in f.title.lower() for f in findings)
+
+
+# ── PY012 InsecureRandom ──────────────────────────────────────────────────────
+
+
+def test_insecure_random_in_security_context(engine: RuleEngine) -> None:
+    code = "import random\ntoken = random.randint(0, 999999)\n"
+    findings = engine.check_all(code, Language.PYTHON)
+    assert any("prng" in f.title.lower() or "weak" in f.title.lower() for f in findings)
+
+
+def test_insecure_random_no_flag_outside_security(engine: RuleEngine) -> None:
+    code = "import random\nx = random.randint(0, 10)\n"
+    findings = engine.check_all(code, Language.PYTHON)
+    assert not any("random" in f.title.lower() for f in findings)
+
+
+# ── PY014 SSRF ───────────────────────────────────────────────────────────────
+
+
+def test_ssrf_rule_fires_on_user_input(engine: RuleEngine) -> None:
+    code = (
+        "from flask import request\n"
+        "import requests\n"
+        "url = request.args.get('url')\n"
+        "resp = requests.get(url)\n"
+    )
+    findings = engine.check_all(code, Language.PYTHON)
+    assert any("ssrf" in f.title.lower() or "request forgery" in f.title.lower() for f in findings)
+
+
+# ── JS005 JWTMisuse ───────────────────────────────────────────────────────────
+
+
+def test_jwt_decode_without_verify(engine: RuleEngine) -> None:
+    code = "const payload = jwt.decode(token);\nconst userId = payload.userId;\n"
+    findings = engine.check_all(code, Language.JAVASCRIPT)
+    assert any("jwt" in f.title.lower() for f in findings)
+
+
+def test_jwt_verify_present_suppresses_decode_finding(engine: RuleEngine) -> None:
+    code = "jwt.verify(token, secret, (err, decoded) => {});\nconst payload = jwt.decode(token);\n"
+    findings = engine.check_all(code, Language.JAVASCRIPT)
+    decode_findings = [f for f in findings if "skips signature" in f.title]
+    assert len(decode_findings) == 0
+
+
+# ── JS006 PrototypePollution ──────────────────────────────────────────────────
+
+
+def test_prototype_pollution_unguarded_merge(engine: RuleEngine) -> None:
+    code = (
+        "function deepMerge(target, source) {\n"
+        "  for (const key of Object.keys(source)) {\n"
+        "    target[key] = source[key];\n"
+        "  }\n"
+        "}\n"
+    )
+    findings = engine.check_all(code, Language.JAVASCRIPT)
+    assert any("prototype" in f.title.lower() or "pollution" in f.title.lower() for f in findings)
+
+
+def test_prototype_pollution_guarded_merge_no_finding(engine: RuleEngine) -> None:
+    code = (
+        "function deepMerge(target, source) {\n"
+        "  for (const key of Object.keys(source)) {\n"
+        "    if (key === '__proto__') continue;\n"
+        "    target[key] = source[key];\n"
+        "  }\n"
+        "}\n"
+    )
+    findings = engine.check_all(code, Language.JAVASCRIPT)
+    assert not any("pollution" in f.title.lower() for f in findings)
