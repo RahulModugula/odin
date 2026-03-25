@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import uuid
 from collections.abc import AsyncGenerator
@@ -12,6 +14,7 @@ import app.graph_rag._store_ref as _store_ref
 from app.api.routes import router
 from app.api.webhook import webhook_router
 from app.config import settings
+from app.observability.metrics import metrics_endpoint
 from app.observability.tracing import flush_langfuse
 
 logger = structlog.get_logger()
@@ -30,6 +33,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     logger.info("odin starting up")
 
+    # Initialise Redis connection (graceful — failure is non-fatal)
+    try:
+        from redis.asyncio import Redis
+
+        redis: Redis = Redis.from_url(settings.redis_url, decode_responses=False)
+        await redis.ping()
+        app.state.redis = redis
+        logger.info("redis connected", url=settings.redis_url)
+    except Exception as exc:
+        app.state.redis = None
+        logger.warning("redis unavailable — cache disabled", error=str(exc))
+
     if settings.graph_rag_enabled:
         from app.graph_rag.store import GraphStore
 
@@ -44,6 +59,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.graph_store = graph_store
 
     yield
+
+    # Teardown
+    redis_conn = getattr(app.state, "redis", None)
+    if redis_conn is not None:
+        await redis_conn.aclose()
 
     if settings.graph_rag_enabled and _store_ref.store is not None:
         await _store_ref.store.close()
@@ -89,6 +109,9 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 app.include_router(router, prefix="/api")
 app.include_router(webhook_router, prefix="/api")
+
+# Expose Prometheus metrics
+app.add_route("/metrics", metrics_endpoint)  # type: ignore[arg-type]
 
 if settings.mcp_enabled:
     try:
