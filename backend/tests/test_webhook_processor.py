@@ -166,14 +166,16 @@ def test_review_body_contains_table() -> None:
         language=Language.PYTHON,
     )
     body = _build_review_body([("src/auth.py", result)])
-    assert "| File | Score | Issues |" in body
+    assert "| File | Score | Critical | High | Medium | Low |" in body
     assert "`src/auth.py`" in body
     assert "75/100" in body
 
 
 def test_review_body_handles_failed_file() -> None:
     body = _build_review_body([("broken.py", None)])
-    assert "Review failed" in body
+    # Failed files render with em-dashes in the score/count columns
+    assert "`broken.py`" in body
+    assert "—" in body
 
 
 def test_review_body_no_line_findings_go_to_general_section() -> None:
@@ -215,6 +217,7 @@ async def test_process_pr_webhook_no_qualifying_files(monkeypatch: pytest.Monkey
 
     with (
         patch("app.services.webhook_processor.get_pr_files", new_callable=AsyncMock, return_value=pr_files),
+        patch("app.services.webhook_processor.get_pr_details", new_callable=AsyncMock, return_value={"title": "test", "body": ""}),
         patch("app.services.webhook_processor.create_pr_review", new_callable=AsyncMock) as mock_post,
     ):
         await process_pr_webhook("alice", "repo", 1, "sha123")

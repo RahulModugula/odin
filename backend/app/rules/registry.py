@@ -7,10 +7,13 @@ from app.rules.engine import rule_engine
 
 
 def register_all() -> None:
-    """Register every built-in rule.  Safe to call more than once."""
+    """Register every built-in rule.  Idempotent — safe to call more than once."""
+    if rule_engine.is_initialized():
+        return
     for rule in python_rules.ALL_RULES:
         rule_engine.register(rule)
     for rule in js_rules.ALL_RULES:
         rule_engine.register(rule)
     for rule in cross_language_rules.ALL_RULES:
         rule_engine.register(rule)
+    rule_engine.mark_initialized()

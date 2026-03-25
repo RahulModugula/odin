@@ -38,10 +38,19 @@ class RuleEngine:
 
     def __init__(self) -> None:
         self._rules: list[Rule] = []
+        self._initialized: bool = False
 
     def register(self, rule: Rule) -> None:
         """Register a rule instance with the engine."""
         self._rules.append(rule)
+
+    def is_initialized(self) -> bool:
+        """Return True if rules have been registered via register_all()."""
+        return self._initialized
+
+    def mark_initialized(self) -> None:
+        """Mark the engine as initialized (called by register_all)."""
+        self._initialized = True
 
     def check_all(
         self,
@@ -49,9 +58,14 @@ class RuleEngine:
         language: Language,
         disabled_rules: list[str] | None = None,
     ) -> list[Finding]:
-        """Run all applicable, non-disabled rules and return their findings."""
+        """Run all applicable, non-disabled rules and return their findings.
+
+        Deduplicates findings by (line_start, category, title prefix) so that
+        overlapping rules (e.g. PY004 and CL004 both detecting hardcoded secrets)
+        only surface the higher-confidence result once.
+        """
         disabled = set(disabled_rules or [])
-        findings: list[Finding] = []
+        raw_findings: list[Finding] = []
 
         # Parse the tree once and share it across all rules
         from app.parsers.tree_sitter_parser import parse_code
@@ -68,11 +82,25 @@ class RuleEngine:
                 continue
             try:
                 rule_findings = rule.check(code, language, structure=structure)
-                findings.extend(rule_findings)
+                for f in rule_findings:
+                    # Stamp source so consumers can distinguish rule vs AI findings
+                    if f.source is None:
+                        f.source = "rule"
+                raw_findings.extend(rule_findings)
             except Exception:
                 pass
 
-        return findings
+        # Deduplicate: same (line, category) keeps highest confidence finding.
+        # This handles overlapping rules like PY004 + CL004 both flagging the same
+        # hardcoded-secret line — we surface the more confident result once.
+        seen: dict[tuple[int | None, str], Finding] = {}
+        for f in raw_findings:
+            key = (f.line_start, f.category.value)
+            existing = seen.get(key)
+            if existing is None or f.confidence > existing.confidence:
+                seen[key] = f
+
+        return list(seen.values())
 
 
 # Module-level singleton — imported by agents and the API

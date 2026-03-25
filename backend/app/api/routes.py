@@ -13,6 +13,7 @@ from pydantic import BaseModel
 
 from app.agents.graph import review_graph
 from app.agents.llm import test_provider
+from app.config import settings
 from app.models.enums import Language
 from app.models.schemas import ReviewRequest, ReviewResult
 from app.models.state import ReviewState
@@ -154,10 +155,14 @@ async def create_review(request: ReviewRequest) -> ReviewResult:
     )
     elapsed_ms = (time.perf_counter() - start) * 1000
 
+    findings = result["findings"]
+    if settings.min_confidence > 0:
+        findings = [f for f in findings if f.confidence >= settings.min_confidence]
+
     review_result = ReviewResult(
         id=review_id,
         metrics=result["metrics"],
-        findings=result["findings"],
+        findings=findings,
         overall_score=result["overall_score"],
         summary=result["summary"],
         agent_outputs=result.get("agent_outputs", []),

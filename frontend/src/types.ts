@@ -7,6 +7,7 @@ export interface Finding {
   line_end?: number | null;
   suggestion?: string | null;
   confidence: number;
+  source?: 'rule' | 'ai' | null;
 }
 
 export interface CodeMetrics {

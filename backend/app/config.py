@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     rules_function_length_threshold: int = 50
     rules_nesting_depth_threshold: int = 4
 
+    # Minimum confidence threshold — findings below this are suppressed (0.0 = show all)
+    min_confidence: float = 0.0
+
     # Review store TTL (seconds)
     review_store_ttl: int = 2_592_000  # 30 days
 

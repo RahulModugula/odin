@@ -13,33 +13,10 @@ const SEVERITY_STYLES: Record<Finding['severity'], { border: string; badge: stri
   info: { border: 'border-l-gray-500', badge: 'bg-gray-800 text-gray-400 ring-1 ring-gray-600/20', badgeText: 'INFO' },
 };
 
-// Determine if finding came from rule engine (high confidence, specific patterns)
-// Rule IDs look like PY001, JS002, CL003, TS001
-function isRuleFinding(finding: Finding): boolean {
-  // Rule engine findings have very high confidence (0.85+) and often have rule-pattern titles
-  return finding.confidence >= 0.9 && (
-    finding.title.includes('`') ||
-    finding.title.toLowerCase().includes('bare except') ||
-    finding.title.toLowerCase().includes('mutable default') ||
-    finding.title.toLowerCase().includes('eval()') ||
-    finding.title.toLowerCase().includes('hardcoded') ||
-    finding.title.toLowerCase().includes('var') ||
-    finding.title.toLowerCase().includes('console.log') ||
-    finding.title.toLowerCase().includes('todo') ||
-    finding.title.toLowerCase().includes('fixme') ||
-    finding.title.toLowerCase().includes('any type') ||
-    finding.title.toLowerCase().includes('xss') ||
-    finding.title.toLowerCase().includes('sql') ||
-    finding.title.toLowerCase().includes('magic number') ||
-    finding.title.toLowerCase().includes('too large') ||
-    finding.title.toLowerCase().includes('too long')
-  );
-}
-
 export function FindingCard({ finding }: FindingCardProps) {
   const [feedback, setFeedback] = useState<'none' | 'helpful' | 'not_helpful'>('none');
   const style = SEVERITY_STYLES[finding.severity];
-  const isRule = isRuleFinding(finding);
+  const isRule = finding.source === 'rule';
 
   const handleFeedback = async (action: 'helpful' | 'not_helpful') => {
     setFeedback(action);
@@ -69,7 +46,7 @@ export function FindingCard({ finding }: FindingCardProps) {
         <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-gray-800 text-gray-400 tracking-wide">
           {finding.category}
         </span>
-        {/* Source badge */}
+        {/* Source badge — driven by the source field, not title heuristics */}
         <span className={`text-[10px] font-medium px-2 py-0.5 rounded tracking-wide ${
           isRule
             ? 'bg-violet-950/60 text-violet-400 ring-1 ring-violet-500/20'

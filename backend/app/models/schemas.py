@@ -56,6 +56,7 @@ class Finding(BaseModel):
     line_end: int | None = None
     suggestion: str | None = None
     confidence: float = Field(ge=0.0, le=1.0, default=0.8)
+    source: str | None = None  # "rule" | "ai"
 
 
 class AgentOutput(BaseModel):

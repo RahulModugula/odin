@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -171,8 +171,9 @@ async def test_quality_agent_handles_error() -> None:
         "metrics": None,
     }
 
-    with patch("app.agents.quality_agent.ChatAnthropic") as mock_cls:
-        mock_instance = mock_cls.return_value
+    with patch("app.agents.quality_agent.get_llm") as mock_get_llm:
+        mock_instance = MagicMock()
+        mock_get_llm.return_value = mock_instance
         mock_structured = AsyncMock(side_effect=Exception("API error"))
         mock_instance.with_structured_output.return_value = mock_structured
 

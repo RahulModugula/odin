@@ -40,7 +40,9 @@ def _handle_error_response(response: httpx.Response) -> None:
     """Raise appropriate exception for non-2xx responses."""
     if response.status_code == 429:
         retry_after_raw = response.headers.get("Retry-After")
-        retry_after = int(retry_after_raw) if retry_after_raw and retry_after_raw.isdigit() else None
+        retry_after = (
+            int(retry_after_raw) if retry_after_raw and retry_after_raw.isdigit() else None
+        )
         raise GithubRateLimitError(retry_after=retry_after)
     if response.status_code >= 400:
         try:

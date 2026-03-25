@@ -154,7 +154,7 @@ def run_rules_only(code: str, language_str: str) -> list[dict]:
         from app.rules.engine import rule_engine
         from app.rules.registry import register_all
 
-        if not rule_engine._rules:
+        if not rule_engine.is_initialized():
             register_all()
 
         findings = rule_engine.check_all(code, Language(language_str))
@@ -241,6 +241,8 @@ def main() -> None:
     parser.add_argument("--fail-on", default="high",
                         choices=SEVERITY_ORDER + ["never"],
                         help="Exit 1 if this severity is found (default: high)")
+    parser.add_argument("--min-confidence", type=float, default=0.0, metavar="FLOAT",
+                        help="Only show findings with confidence >= this value (0.0–1.0)")
     parser.add_argument("--json", action="store_true", help="Output JSON")
 
     args = parser.parse_args()
@@ -289,6 +291,8 @@ def main() -> None:
         else:
             findings = run_full_review(code, lang, str(filepath))
         findings = [f for f in findings if SEVERITY_ORDER.index(f.get("severity", "info")) <= min_idx]
+        if args.min_confidence > 0:
+            findings = [f for f in findings if f.get("confidence", 1.0) >= args.min_confidence]
 
         if not findings:
             print(f"  {green('✓ No issues found')}\n")

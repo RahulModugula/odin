@@ -74,10 +74,7 @@ def should_skip_file(filename: str, status: str) -> bool:
 
     # Vendored / node_modules
     parts = filename.replace("\\", "/").split("/")
-    if "vendor" in parts or "node_modules" in parts:
-        return True
-
-    return False
+    return bool("vendor" in parts or "node_modules" in parts)
 
 
 def _parse_changed_lines(patch: str | None) -> list[tuple[int, int]]:
@@ -147,7 +144,10 @@ async def _review_single_file(
 
 
 def _severity_sort_key(s: Severity) -> int:
-    order = {Severity.CRITICAL: 0, Severity.HIGH: 1, Severity.MEDIUM: 2, Severity.LOW: 3, Severity.INFO: 4}
+    order = {
+        Severity.CRITICAL: 0, Severity.HIGH: 1, Severity.MEDIUM: 2,
+        Severity.LOW: 3, Severity.INFO: 4,
+    }
     return order.get(s, 99)
 
 
@@ -210,7 +210,8 @@ def _build_review_body(
         for f in result.findings:
             counts[f.severity.value] = counts.get(f.severity.value, 0) + 1
 
-        score_emoji = "🟢" if result.overall_score >= 80 else "🟡" if result.overall_score >= 60 else "🔴"
+        s = result.overall_score
+        score_emoji = "🟢" if s >= 80 else "🟡" if s >= 60 else "🔴"
         lines.append(
             f"| `{filename}` | {score_emoji} {result.overall_score}/100 | "
             f"{counts['critical'] or '—'} | {counts['high'] or '—'} | "
@@ -360,7 +361,11 @@ async def process_pr_webhook(
             pr_body=pr_details.get("body", ""),
             file_changes=pr_files,
         )
-        log.debug("pr summary generated", change_type=pr_summary.get("change_type"), risk=pr_summary.get("risk"))
+        log.debug(
+            "pr summary generated",
+            change_type=pr_summary.get("change_type"),
+            risk=pr_summary.get("risk"),
+        )
     except Exception as exc:
         log.warning("pr summary generation failed, continuing without it", error=str(exc))
 

@@ -65,8 +65,7 @@ def run_rules_node(state: ReviewState) -> dict:  # type: ignore[type-arg]
     if not settings.rules_enabled:
         return {"findings": []}
 
-    # Idempotent: only register if the engine is still empty
-    if not rule_engine._rules:
+    if not rule_engine.is_initialized():
         register_all()
 
     try:

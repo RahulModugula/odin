@@ -43,7 +43,8 @@ async def generate_pr_summary(
         patch = f.get("patch", "")
         # Include first 30 lines of diff
         patch_preview = "\n".join(patch.splitlines()[:30]) if patch else "(no diff available)"
-        changes_text.append(f"### {fname} (+{additions}/-{deletions})\n```diff\n{patch_preview}\n```")
+        header = f"### {fname} (+{additions}/-{deletions})"
+        changes_text.append(f"{header}\n```diff\n{patch_preview}\n```")
 
     prompt = f"""PR Title: {pr_title}
 
@@ -77,5 +78,7 @@ Generate the PR summary JSON."""
             "change_type": "unknown",
             "risk": "medium",
             "risk_reason": "Unable to assess — review required",
-            "walkthrough": [{"file": f["filename"], "change": "Modified"} for f in file_changes[:10]],
+            "walkthrough": [
+                {"file": f["filename"], "change": "Modified"} for f in file_changes[:10]
+            ],
         }

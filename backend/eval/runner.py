@@ -83,7 +83,7 @@ def _run_rules_sync(code: str, language: str) -> list:
     from app.rules.engine import rule_engine
     from app.rules.registry import register_all
 
-    if not rule_engine._rules:
+    if not rule_engine.is_initialized():
         register_all()
     return rule_engine.check_all(code, Language(language))
 

@@ -93,9 +93,7 @@ async def _handle_bot_comment(
         )
         # Fetch the PR head SHA and kick off a new review
         try:
-            from app.services.github_client import get_pr_details
-            pr_data = await get_pr_details(owner, repo, issue_number)
-            # get_pr_details doesn't return SHA; fetch it separately via the pulls endpoint
+            # Fetch SHA directly from the pulls endpoint (get_pr_details doesn't return it)
             import httpx
 
             from app.services.github_client import GITHUB_API_BASE, _auth_headers

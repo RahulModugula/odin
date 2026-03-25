@@ -22,7 +22,7 @@ _CALLEE_FIELD: dict[str, str] = {
 
 def _node_id(kind: str, name: str, file_path: str) -> str:
     raw = f"{kind}:{name}:{file_path}"
-    return hashlib.sha1(raw.encode()).hexdigest()[:16]
+    return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 def extract_graph_entities(

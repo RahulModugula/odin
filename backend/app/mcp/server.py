@@ -94,15 +94,20 @@ async def analyze_file(file_path: str) -> dict[str, Any]:
     Args:
         file_path: Absolute or relative path to the source file.
     """
+    import asyncio
+
     path = Path(file_path)
-    if not path.exists():
+    exists = await asyncio.to_thread(path.exists)
+    if not exists:
         return {"error": f"File not found: {file_path}"}
-    if not path.is_file():
+    is_file = await asyncio.to_thread(path.is_file)
+    if not is_file:
         return {"error": f"Not a file: {file_path}"}
 
-    code = path.read_text(encoding="utf-8", errors="replace")
+    code = await asyncio.to_thread(path.read_text, "utf-8", "replace")
+    resolved = await asyncio.to_thread(path.resolve)
     lang = _detect_language(file_path)
-    return await _run_review(code, lang, file_path=str(path.resolve()))
+    return await _run_review(code, lang, file_path=str(resolved))
 
 
 @mcp.tool()
