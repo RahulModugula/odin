@@ -126,6 +126,34 @@ async def get_file_content(owner: str, repo: str, ref: str, path: str) -> str | 
     return decoded
 
 
+async def get_pr_details(owner: str, repo: str, pull_number: int) -> dict:  # type: ignore[type-arg]
+    """Fetch PR metadata: title, body, author, base/head branch names."""
+    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/pulls/{pull_number}"
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url, headers=_auth_headers())
+    _handle_error_response(response)
+    data = response.json()
+    return {
+        "title": data.get("title", ""),
+        "body": data.get("body", "") or "",
+        "author": data.get("user", {}).get("login", ""),
+        "base_branch": data.get("base", {}).get("ref", ""),
+        "head_branch": data.get("head", {}).get("ref", ""),
+        "additions": data.get("additions", 0),
+        "deletions": data.get("deletions", 0),
+        "changed_files": data.get("changed_files", 0),
+    }
+
+
+async def post_issue_comment(owner: str, repo: str, issue_number: int, body: str) -> dict:  # type: ignore[type-arg]
+    """Post a comment on a PR (issues and PRs share the same comment API)."""
+    url = f"{GITHUB_API_BASE}/repos/{owner}/{repo}/issues/{issue_number}/comments"
+    async with httpx.AsyncClient() as client:
+        response = await client.post(url, headers=_auth_headers(), json={"body": body})
+    _handle_error_response(response)
+    return response.json()  # type: ignore[no-any-return]
+
+
 async def create_pr_review(
     owner: str,
     repo: str,

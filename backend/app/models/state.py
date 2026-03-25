@@ -1,5 +1,5 @@
 import operator
-from typing import Annotated, TypedDict
+from typing import Annotated, NotRequired, TypedDict
 
 from app.models.schemas import AgentOutput, CodeMetrics, Finding
 
@@ -15,6 +15,10 @@ class ReviewState(TypedDict):
     summary: str
     codebase_context: str
     file_path: str | None
+    # PR-context fields (optional — not set when using the direct /review API)
+    diff: NotRequired[str]
+    changed_lines: NotRequired[list[tuple[int, int]]]
+    pr_context: NotRequired[dict]
 
 
 class AgentInput(TypedDict):
