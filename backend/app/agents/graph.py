@@ -57,8 +57,28 @@ async def enrich_context_node(state: ReviewState) -> dict:  # type: ignore[type-
     return {"codebase_context": context}
 
 
+def run_rules_node(state: ReviewState) -> dict:  # type: ignore[type-arg]
+    """Run deterministic rule-based checks in parallel with the AI agents."""
+    from app.rules.engine import rule_engine
+    from app.rules.registry import register_all
+
+    if not settings.rules_enabled:
+        return {"findings": []}
+
+    # Idempotent: only register if the engine is still empty
+    if not rule_engine._rules:
+        register_all()
+
+    try:
+        lang = Language(state["language"])
+        findings = rule_engine.check_all(state["code"], lang)
+        return {"findings": findings}
+    except Exception:
+        return {"findings": []}
+
+
 def fan_out_to_agents(state: ReviewState) -> list[Send]:
-    """Fan out to all three review agents in parallel."""
+    """Fan out to all three review agents and the rules engine in parallel."""
     agent_input = {
         "code": state["code"],
         "language": state["language"],
@@ -70,6 +90,7 @@ def fan_out_to_agents(state: ReviewState) -> list[Send]:
         Send("quality_agent", agent_input),
         Send("security_agent", agent_input),
         Send("docs_agent", agent_input),
+        Send("run_rules", state),  # pass full state so the node has code + language
     ]
 
 
@@ -209,16 +230,20 @@ builder.add_node("enrich_context", enrich_context_node)
 builder.add_node("quality_agent", run_quality_agent)
 builder.add_node("security_agent", run_security_agent)
 builder.add_node("docs_agent", run_docs_agent)
+builder.add_node("run_rules", run_rules_node)
 builder.add_node("synthesize", synthesize)
 
 builder.add_edge(START, "parse_code")
 builder.add_edge("parse_code", "enrich_context")
 builder.add_conditional_edges(
-    "enrich_context", fan_out_to_agents, ["quality_agent", "security_agent", "docs_agent"]
+    "enrich_context",
+    fan_out_to_agents,
+    ["quality_agent", "security_agent", "docs_agent", "run_rules"],
 )
 builder.add_edge("quality_agent", "synthesize")
 builder.add_edge("security_agent", "synthesize")
 builder.add_edge("docs_agent", "synthesize")
+builder.add_edge("run_rules", "synthesize")
 builder.add_edge("synthesize", END)
 
 review_graph = builder.compile()
