@@ -61,5 +61,5 @@ export interface AgentStatuses {
 
 export interface ReviewRequest {
   code: string;
-  language: 'python' | 'javascript' | 'typescript' | 'go';
+  language: 'python' | 'javascript' | 'typescript' | 'go' | 'rust' | 'java';
 }
