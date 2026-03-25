@@ -1,12 +1,14 @@
 """Orchestrates GitHub PR webhook processing: fetch changed files, review each, post results."""
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Any
 
 import structlog
 
 from app.agents.graph import review_graph
+from app.agents.summary_agent import generate_pr_summary
 from app.config import settings
 from app.models.enums import Language, Severity
 from app.models.schemas import Finding, ReviewResult
@@ -16,6 +18,7 @@ from app.services.github_client import (
     GithubRateLimitError,
     create_pr_review,
     get_file_content,
+    get_pr_details,
     get_pr_files,
 )
 
@@ -77,12 +80,34 @@ def should_skip_file(filename: str, status: str) -> bool:
     return False
 
 
+def _parse_changed_lines(patch: str | None) -> list[tuple[int, int]]:
+    """Extract changed line ranges from a unified diff patch."""
+    if not patch:
+        return []
+
+    ranges = []
+
+    for line in patch.splitlines():
+        if line.startswith("@@"):
+            # Parse @@ -old_start,old_count +new_start,new_count @@
+            m = re.search(r'\+(\d+)(?:,(\d+))?', line)
+            if m:
+                start = int(m.group(1))
+                count = int(m.group(2)) if m.group(2) else 1
+                if count > 0:
+                    ranges.append((start, start + count - 1))
+
+    return ranges
+
+
 async def _review_single_file(
     owner: str,
     repo: str,
     ref: str,
     filename: str,
     language: Language,
+    patch: str | None = None,
+    changed_lines: list[tuple[int, int]] | None = None,
 ) -> ReviewResult | None:
     """Fetch and review a single file. Returns None on any error."""
     try:
@@ -102,6 +127,9 @@ async def _review_single_file(
             "summary": "",
             "codebase_context": "",
             "file_path": filename,
+            "diff": patch or "",
+            "changed_lines": changed_lines or [],
+            "pr_context": {},
         }
         result: dict[str, Any] = await review_graph.ainvoke(state, config={"callbacks": []})
 
@@ -125,56 +153,108 @@ def _severity_sort_key(s: Severity) -> int:
 
 def _build_review_body(
     file_results: list[tuple[str, ReviewResult | None]],
+    pr_summary: dict | None = None,  # type: ignore[type-arg]
+    pr_context: dict | None = None,  # type: ignore[type-arg]
 ) -> str:
     """Build the top-level markdown body for the GitHub PR review."""
-    lines = ["## Odin AI Code Review\n"]
+    lines = []
 
-    # Summary table
-    lines.append("| File | Score | Issues |")
-    lines.append("|------|-------|--------|")
+    # Header with branding
+    lines.append("## Odin Code Review\n")
+
+    # PR Summary section (if available)
+    if pr_summary:
+        change_type = pr_summary.get("change_type", "unknown")
+        risk = pr_summary.get("risk", "medium")
+        risk_emoji = {"low": "🟢", "medium": "🟡", "high": "🔴"}.get(risk, "🟡")
+        type_emoji = {
+            "feature": "✨", "bugfix": "🐛", "refactor": "♻️", "docs": "📚",
+            "tests": "🧪", "security": "🔒", "chore": "🔧",
+        }.get(change_type, "📦")
+
+        lines.append(f"### {type_emoji} Summary")
+        lines.append(f"{pr_summary.get('summary', '')}\n")
+        lines.append(f"**Type:** {change_type} &nbsp; **Risk:** {risk_emoji} {risk}")
+        if pr_summary.get("risk_reason"):
+            lines.append(f"  \n*{pr_summary['risk_reason']}*")
+        lines.append("")
+
+        # Walkthrough table
+        walkthrough = pr_summary.get("walkthrough", [])
+        if walkthrough:
+            lines.append("<details>")
+            lines.append("<summary>📋 Walkthrough</summary>\n")
+            lines.append("| File | Change |")
+            lines.append("|------|--------|")
+            for item in walkthrough:
+                fname = item.get("file", "")
+                change = item.get("change", "")
+                lines.append(f"| `{fname}` | {change} |")
+            lines.append("</details>\n")
+
+    # File review table
+    lines.append("### 📊 File Review Summary\n")
+    lines.append("| File | Score | Critical | High | Medium | Low |")
+    lines.append("|------|-------|----------|------|--------|-----|")
 
     general_findings: list[tuple[str, Finding]] = []
+    total_score = 0
+    reviewed_count = 0
 
     for filename, result in file_results:
         if result is None:
-            lines.append(f"| `{filename}` | — | Review failed |")
+            lines.append(f"| `{filename}` | — | — | — | — | — |")
             continue
 
-        counts: dict[str, int] = {}
+        counts: dict[str, int] = {"critical": 0, "high": 0, "medium": 0, "low": 0}
         for f in result.findings:
             counts[f.severity.value] = counts.get(f.severity.value, 0) + 1
 
-        issue_parts = []
-        for sev in ["critical", "high", "medium", "low", "info"]:
-            if counts.get(sev, 0) > 0:
-                issue_parts.append(f"{counts[sev]} {sev}")
-        issues_str = ", ".join(issue_parts) if issue_parts else "none"
+        score_emoji = "🟢" if result.overall_score >= 80 else "🟡" if result.overall_score >= 60 else "🔴"
+        lines.append(
+            f"| `{filename}` | {score_emoji} {result.overall_score}/100 | "
+            f"{counts['critical'] or '—'} | {counts['high'] or '—'} | "
+            f"{counts['medium'] or '—'} | {counts['low'] or '—'} |"
+        )
+        total_score += result.overall_score
+        reviewed_count += 1
 
-        lines.append(f"| `{filename}` | {result.overall_score}/100 | {issues_str} |")
-
-        # Collect findings without line numbers for the general section
         for finding in result.findings:
             if finding.line_start is None:
                 general_findings.append((filename, finding))
 
-    total_findings = sum(
-        len(r.findings) for _, r in file_results if r is not None
-    )
-    reviewed = sum(1 for _, r in file_results if r is not None)
-    lines.append(f"\n**{total_findings} total findings** across {reviewed} file(s)\n")
+    if reviewed_count > 0:
+        avg_score = total_score // reviewed_count
+        score_emoji = "🟢" if avg_score >= 80 else "🟡" if avg_score >= 60 else "🔴"
+        total_findings = sum(len(r.findings) for _, r in file_results if r is not None)
+        lines.append(
+            f"\n**Overall Score: {score_emoji} {avg_score}/100** &nbsp; | &nbsp; "
+            f"**{total_findings} finding(s)** across {reviewed_count} file(s)\n"
+        )
 
+    # General findings (no line numbers)
     if general_findings:
-        lines.append("### General Findings\n")
-        for filename, finding in general_findings:
-            lines.append(
-                f"**`{filename}`** — **[{finding.severity.upper()}/{finding.category.upper()}]** "
-                f"{finding.title}\n\n{finding.description}\n"
-            )
+        lines.append("<details>")
+        lines.append("<summary>📝 General Findings</summary>\n")
+        for filename, finding in general_findings[:10]:
+            severity_emoji = {
+                "critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵", "info": "⚪",
+            }.get(finding.severity.value, "⚪")
+            lines.append(f"**`{filename}`** {severity_emoji} **{finding.title}**")
+            lines.append(f"\n{finding.description}\n")
             if finding.suggestion:
-                lines.append(f"> {finding.suggestion}\n")
+                lines.append(f"> 💡 {finding.suggestion}\n")
+        lines.append("</details>\n")
 
+    # Footer
     lines.append("---")
-    lines.append("_Powered by [Odin](https://github.com/rahulvramesh/odin) — AI-powered multi-agent code review_")
+    lines.append(
+        "*[Odin](https://github.com/odin-review/odin) — Open-source AI code review. "
+        "Self-host with LM Studio or OpenRouter.*"
+    )
+    lines.append(
+        "*Configure via `.odin.yaml` • [Docs](https://github.com/odin-review/odin#configuration)*"
+    )
 
     return "\n".join(lines)
 
@@ -189,14 +269,19 @@ def _build_inline_comments(
         if finding.line_start is None:
             continue
 
+        severity_emoji = {
+            "critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🔵", "info": "⚪",
+        }.get(finding.severity.value, "⚪")
+        category = finding.category.value.upper()
+
         body_parts = [
-            f"**[{finding.severity.upper()}/{finding.category.upper()}]** {finding.title}",
+            f"{severity_emoji} **[{finding.severity.value.upper()}/{category}]** {finding.title}",
             "",
             finding.description,
         ]
         if finding.suggestion:
-            body_parts.extend(["", f"> **Suggestion:** {finding.suggestion}"])
-        body_parts.extend(["", f"_Confidence: {finding.confidence:.0%}_"])
+            body_parts.extend(["", f"> 💡 **Suggestion:** {finding.suggestion}"])
+        body_parts.extend(["", f"*Confidence: {finding.confidence:.0%}*"])
 
         comments.append(
             {
@@ -228,10 +313,14 @@ async def process_pr_webhook(
         log.warning("ODIN_GITHUB_TOKEN not set — skipping PR review")
         return
 
+    # Fetch PR metadata and file list concurrently
     try:
-        pr_files = await get_pr_files(owner, repo, pull_number)
+        pr_details, pr_files = await asyncio.gather(
+            get_pr_details(owner, repo, pull_number),
+            get_pr_files(owner, repo, pull_number),
+        )
     except (GithubClientError, GithubRateLimitError) as exc:
-        log.error("failed to fetch PR files", error=str(exc))
+        log.error("failed to fetch PR data", error=str(exc))
         return
 
     # Filter to qualifying files
@@ -245,7 +334,11 @@ async def process_pr_webhook(
         try:
             await create_pr_review(
                 owner, repo, pull_number, head_sha,
-                body="## Odin AI Code Review\n\nNo files in supported languages (Python, JavaScript, TypeScript, Go) found in this PR.",
+                body=(
+                    "## Odin Code Review\n\n"
+                    "No files in supported languages (Python, JavaScript, TypeScript, Go) "
+                    "found in this PR."
+                ),
                 comments=[],
             )
         except Exception as exc:
@@ -259,12 +352,26 @@ async def process_pr_webhook(
 
     log.info("starting pr review", files=len(qualifying), skipped=skipped_count)
 
-    # Fan out: review all files concurrently
+    # Generate PR-level summary using the LLM before per-file reviews
+    pr_summary: dict | None = None  # type: ignore[type-arg]
+    try:
+        pr_summary = await generate_pr_summary(
+            pr_title=pr_details.get("title", ""),
+            pr_body=pr_details.get("body", ""),
+            file_changes=pr_files,
+        )
+        log.debug("pr summary generated", change_type=pr_summary.get("change_type"), risk=pr_summary.get("risk"))
+    except Exception as exc:
+        log.warning("pr summary generation failed, continuing without it", error=str(exc))
+
+    # Fan out: review all files concurrently, passing diff context
     tasks = [
         _review_single_file(
             owner, repo, head_sha,
             f["filename"],
             detect_language(f["filename"]),  # type: ignore[arg-type]
+            patch=f.get("patch"),
+            changed_lines=_parse_changed_lines(f.get("patch")),
         )
         for f in qualifying
     ]
@@ -275,8 +382,12 @@ async def process_pr_webhook(
         for f, result in zip(qualifying, results, strict=True)
     ]
 
-    # Build review body
-    review_body = _build_review_body(file_results)
+    # Build review body with PR summary
+    review_body = _build_review_body(
+        file_results,
+        pr_summary=pr_summary,
+        pr_context=pr_details,
+    )
     if skipped_count > 0:
         review_body += (
             f"\n\n> ⚠️ {skipped_count} additional file(s) were not reviewed "
