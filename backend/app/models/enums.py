@@ -6,6 +6,8 @@ class Language(StrEnum):
     JAVASCRIPT = "javascript"
     TYPESCRIPT = "typescript"
     GO = "go"
+    RUST = "rust"
+    JAVA = "java"
 
 
 class Severity(StrEnum):
@@ -22,3 +24,4 @@ class Category(StrEnum):
     DOCUMENTATION = "documentation"
     PERFORMANCE = "performance"
     STYLE = "style"
+    MAINTAINABILITY = "maintainability"

@@ -33,27 +33,61 @@ _COMPLEXITY_NODES: dict[str, set[str]] = {
         "binary_expression",  # for && and ||
         "switch_case",
     },
+    "typescript": {
+        "if_statement",
+        "for_statement",
+        "for_in_statement",
+        "while_statement",
+        "do_statement",
+        "catch_clause",
+        "ternary_expression",
+        "binary_expression",
+        "switch_case",
+        "optional_chain",
+    },
+    "go": {
+        "if_statement",
+        "for_statement",
+        "range_clause",
+        "type_switch_statement",
+        "expression_switch_statement",
+        "select_statement",
+        "binary_expression",  # for && and ||
+    },
 }
 
 # Function definition node types per language
 _FUNCTION_NODES: dict[str, set[str]] = {
     "python": {"function_definition"},
     "javascript": {"function_declaration", "arrow_function", "method_definition"},
+    "typescript": {
+        "function_declaration",
+        "arrow_function",
+        "method_definition",
+        "function_signature",
+    },
+    "go": {"function_declaration", "method_declaration"},
 }
 
 _CLASS_NODES: dict[str, set[str]] = {
     "python": {"class_definition"},
     "javascript": {"class_declaration"},
+    "typescript": {"class_declaration"},
+    "go": {"type_declaration"},  # Go uses type + struct, approximated here
 }
 
 _IMPORT_NODES: dict[str, set[str]] = {
     "python": {"import_statement", "import_from_statement"},
     "javascript": {"import_statement"},
+    "typescript": {"import_statement"},
+    "go": {"import_declaration"},
 }
 
 _COMMENT_NODES: dict[str, set[str]] = {
     "python": {"comment"},
     "javascript": {"comment"},
+    "typescript": {"comment"},
+    "go": {"comment"},
 }
 
 
@@ -186,7 +220,7 @@ def _calculate_complexity(root: Node, lang: str) -> int:
     def walk(node: Node) -> None:
         nonlocal complexity
         if node.type in complexity_types:
-            if lang == "javascript" and node.type == "binary_expression":
+            if lang in ("javascript", "typescript", "go") and node.type == "binary_expression":
                 op = _get_child_text(node, "operator")
                 if op in ("&&", "||"):
                     complexity += 1
@@ -220,6 +254,26 @@ def _calculate_nesting_depth(root: Node, lang: str) -> int:
             "function_declaration",
             "arrow_function",
             "class_declaration",
+        },
+        "typescript": {
+            "if_statement",
+            "for_statement",
+            "for_in_statement",
+            "while_statement",
+            "do_statement",
+            "try_statement",
+            "function_declaration",
+            "arrow_function",
+            "class_declaration",
+        },
+        "go": {
+            "if_statement",
+            "for_statement",
+            "select_statement",
+            "type_switch_statement",
+            "expression_switch_statement",
+            "function_declaration",
+            "method_declaration",
         },
     }
     types = nesting_types.get(lang, set())
