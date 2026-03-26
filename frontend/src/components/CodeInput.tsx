@@ -1,4 +1,4 @@
-import { type ChangeEvent, useState } from 'react';
+import { type ChangeEvent, type KeyboardEvent, useState } from 'react';
 
 interface CodeInputProps {
   code: string;
@@ -173,6 +173,13 @@ export function CodeInput({ code, language, isLoading, onCodeChange, onLanguageC
     onLanguageChange(e.target.value as CodeInputProps['language']);
   };
 
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      onSubmit();
+    }
+  };
+
   const currentSamples = SAMPLE_CODE[language] || [];
 
   const loadSample = (sample: { code: string; language: CodeInputProps['language'] }) => {
@@ -249,6 +256,9 @@ export function CodeInput({ code, language, isLoading, onCodeChange, onLanguageC
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
               Review Code
+              <kbd className="hidden sm:inline-flex items-center gap-0.5 text-[10px] bg-indigo-700/60 px-1.5 py-0.5 rounded font-mono opacity-80">
+                ⌘↵
+              </kbd>
             </>
           )}
         </button>
@@ -259,6 +269,7 @@ export function CodeInput({ code, language, isLoading, onCodeChange, onLanguageC
         <textarea
           value={code}
           onChange={e => onCodeChange(e.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder="Paste your code here, or choose a sample above..."
           spellCheck={false}
           className="w-full h-full bg-gray-950 text-gray-200 border border-gray-700/50 rounded-xl p-4 font-mono text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 placeholder:text-gray-600 scrollbar-thin"
