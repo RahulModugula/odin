@@ -76,6 +76,24 @@ async def _handle_bot_comment(
 
     body_lower = comment_body.lower()
 
+    # Help command — list available commands
+    if "help" in body_lower:
+        await post_issue_comment(
+            owner,
+            repo,
+            issue_number,
+            (
+                "### Odin bot commands\n\n"
+                "| Command | Description |\n"
+                "| ------- | ----------- |\n"
+                "| `@odin review` | Trigger a fresh AI code review on this PR |\n"
+                "| `@odin help` | Show this command reference |\n\n"
+                "_Odin analyzes your diff for security vulnerabilities, code quality issues, "
+                "and documentation gaps using 25 deterministic rules + 3 parallel AI agents._"
+            ),
+        )
+        return
+
     # Re-review command
     if "review" in body_lower:
         if not is_pull_request:
@@ -118,14 +136,14 @@ async def _handle_bot_comment(
             )
         return
 
-    # Generic question — give a brief helpful reply
+    # Generic mention — nudge toward available commands
     await post_issue_comment(
         owner,
         repo,
         issue_number,
         (
             "Hi! I'm Odin, an AI code review bot. "
-            "You can mention `@odin review` to trigger a fresh code review on this PR."
+            "Try `@odin review` to trigger a fresh review, or `@odin help` to see all commands."
         ),
     )
 
