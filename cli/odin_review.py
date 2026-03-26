@@ -272,6 +272,8 @@ def main() -> None:
     parser.add_argument("--min-confidence", type=float, default=0.0, metavar="FLOAT",
                         help="Only show findings with confidence >= this value (0.0–1.0)")
     parser.add_argument("--json", action="store_true", help="Output JSON")
+    parser.add_argument("--quiet", "-q", action="store_true",
+                        help="Suppress output when no issues are found (ideal for git hooks and CI)")
 
     args = parser.parse_args()
 
@@ -298,8 +300,9 @@ def main() -> None:
     min_idx  = SEVERITY_ORDER.index(args.min_severity)
     fail_idx = SEVERITY_ORDER.index(args.fail_on) if args.fail_on != "never" else 99
 
-    print(f"\n{bold('🔍 Odin Code Review')}\n")
-    print(f"{dim('Files:')} {len(files)}  {dim('Mode:')} {'rules-only' if args.rules_only else 'full (rules + AI)'}\n")
+    if not args.quiet:
+        print(f"\n{bold('🔍 Odin Code Review')}\n")
+        print(f"{dim('Files:')} {len(files)}  {dim('Mode:')} {'rules-only' if args.rules_only else 'full (rules + AI)'}\n")
 
     all_findings: list[dict] = []
 
@@ -323,9 +326,15 @@ def main() -> None:
             findings = [f for f in findings if f.get("confidence", 1.0) >= args.min_confidence]
 
         if not findings:
-            print(f"  {green('✓ No issues found')}\n")
+            if not args.quiet:
+                print(f"  {green('✓ No issues found')}\n")
         else:
-            print_findings(findings)
+            if not args.quiet:
+                print_findings(findings)
+            else:
+                # In quiet mode still show findings so the user knows what failed
+                print(bold(str(filepath)))
+                print_findings(findings)
             all_findings.extend(findings)
 
     # ---- summary ----
@@ -342,7 +351,8 @@ def main() -> None:
         if args.json:
             print("\n" + json.dumps(all_findings, indent=2))
     else:
-        print(green("✓ All clear!"))
+        if not args.quiet:
+            print(green("✓ All clear!"))
 
     # ---- exit code ----
     if args.fail_on != "never":
