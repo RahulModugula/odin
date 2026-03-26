@@ -95,6 +95,35 @@ EXTENSION_TO_LANGUAGE: dict[str, str] = {
 SKIP_DIRS = {"node_modules", "vendor", "__pycache__", ".git", "dist", "build",
              ".venv", "venv", ".tox", ".mypy_cache"}
 
+# Shebang patterns used when a file has no recognised extension
+_SHEBANG_LANGUAGE: list[tuple[str, str]] = [
+    ("python3", "python"),
+    ("python",  "python"),
+    ("node",    "javascript"),
+    ("nodejs",  "javascript"),
+    ("bun",     "javascript"),
+    ("deno",    "typescript"),
+]
+
+
+def _detect_language(path: Path) -> str | None:
+    """Return a language string for *path*, trying extension then shebang."""
+    lang = EXTENSION_TO_LANGUAGE.get(path.suffix.lower())
+    if lang:
+        return lang
+    # Fall back to shebang inspection for extensionless files (e.g. scripts)
+    try:
+        first_line = path.read_text(encoding="utf-8", errors="ignore").split("\n", 1)[0]
+    except OSError:
+        return None
+    if not first_line.startswith("#!"):
+        return None
+    lower = first_line.lower()
+    for token, detected in _SHEBANG_LANGUAGE:
+        if token in lower:
+            return detected
+    return None
+
 
 # --------------------------------------------------------------------------- #
 # File collection                                                              #
@@ -105,17 +134,16 @@ def collect_files(paths: list[str]) -> list[Path]:
     for p in paths:
         path = Path(p)
         if path.is_file():
-            if path.suffix.lower() in EXTENSION_TO_LANGUAGE:
+            if _detect_language(path) is not None:
                 result.append(path)
         elif path.is_dir():
             for f in sorted(path.rglob("*")):
                 if not f.is_file():
                     continue
-                if f.suffix.lower() not in EXTENSION_TO_LANGUAGE:
-                    continue
                 if any(part in SKIP_DIRS for part in f.parts):
                     continue
-                result.append(f)
+                if _detect_language(f) is not None:
+                    result.append(f)
     return result
 
 
@@ -276,7 +304,7 @@ def main() -> None:
     all_findings: list[dict] = []
 
     for filepath in files:
-        lang = EXTENSION_TO_LANGUAGE.get(filepath.suffix.lower())
+        lang = _detect_language(filepath)
         if not lang:
             continue
         try:
