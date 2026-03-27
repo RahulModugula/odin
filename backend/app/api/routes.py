@@ -8,7 +8,7 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.agents.graph import review_graph
@@ -121,8 +121,8 @@ async def _try_cache_set(code: str, language: str, result: ReviewResult) -> None
 # ---------------------------------------------------------------------------
 
 
-@router.post("/review", response_model=ReviewResult)
-async def create_review(request: ReviewRequest) -> ReviewResult:
+@router.post("/review")
+async def create_review(request: ReviewRequest) -> JSONResponse:
     start = time.perf_counter()
     review_id = str(uuid.uuid4())
 
@@ -130,7 +130,11 @@ async def create_review(request: ReviewRequest) -> ReviewResult:
     cached = await _try_cache_get(request.code, request.language.value)
     if cached is not None:
         cached.id = review_id
-        return cached
+        cached.cached = True
+        return JSONResponse(
+            content=cached.model_dump(mode="json"),
+            headers={"X-Review-ID": review_id, "X-Cache": "HIT"},
+        )
 
     initial_state: ReviewState = {
         "code": request.code,
@@ -173,7 +177,10 @@ async def create_review(request: ReviewRequest) -> ReviewResult:
     # --- cache store ---
     await _try_cache_set(request.code, request.language.value, review_result)
 
-    return review_result
+    return JSONResponse(
+        content=review_result.model_dump(mode="json"),
+        headers={"X-Review-ID": review_id, "X-Cache": "MISS"},
+    )
 
 
 # ---------------------------------------------------------------------------
