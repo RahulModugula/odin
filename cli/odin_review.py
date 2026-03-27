@@ -259,21 +259,44 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Odin CLI — review code before you push",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Review a single file
+  python odin_review.py backend/app/main.py
+
+  # Review all Python files in a directory
+  python odin_review.py backend/app
+
+  # Review staged git changes (pre-push)
+  python odin_review.py --staged
+
+  # Rules-only mode (no LLM, instant)
+  python odin_review.py --staged --rules-only
+
+  # Suppress output on clean scans (for CI/hooks)
+  python odin_review.py --staged --quiet && git push
+
+  # Output as JSON for CI/scripting
+  python odin_review.py --staged --json | jq .
+
+  # Filter by severity and confidence
+  python odin_review.py backend/ --min-severity high --min-confidence 0.8
+        """,
     )
     parser.add_argument("paths", nargs="*", help="Files or directories to review")
-    parser.add_argument("--staged",    action="store_true", help="Review git staged files")
-    parser.add_argument("--diff",      metavar="REF",       help="Review files changed since REF (e.g. HEAD~1)")
-    parser.add_argument("--rules-only",action="store_true", help="Deterministic rules only — instant, no LLM")
+    parser.add_argument("--staged",    action="store_true", help="Review only git staged files (for pre-push)")
+    parser.add_argument("--diff",      metavar="REF",       help="Review files changed since REF (e.g. HEAD~1, origin/main)")
+    parser.add_argument("--rules-only",action="store_true", help="Run only deterministic rules (instant, zero LLM cost)")
     parser.add_argument("--min-severity", default="low",
-                        choices=SEVERITY_ORDER, help="Minimum severity to show (default: low)")
+                        choices=SEVERITY_ORDER, help="Show only findings at this severity or worse (default: low)")
     parser.add_argument("--fail-on", default="high",
                         choices=SEVERITY_ORDER + ["never"],
-                        help="Exit 1 if this severity is found (default: high)")
+                        help="Exit with code 1 if this severity or worse is found (default: high)")
     parser.add_argument("--min-confidence", type=float, default=0.0, metavar="FLOAT",
-                        help="Only show findings with confidence >= this value (0.0–1.0)")
-    parser.add_argument("--json", action="store_true", help="Output JSON")
+                        help="Filter to findings with confidence >= FLOAT (0.0–1.0, default: 0.0)")
+    parser.add_argument("--json", action="store_true", help="Output findings as JSON for CI/automation")
     parser.add_argument("--quiet", "-q", action="store_true",
-                        help="Suppress output when no issues are found (ideal for git hooks and CI)")
+                        help="Suppress banner and success messages (findings always shown; ideal for CI/hooks)")
 
     args = parser.parse_args()
 
