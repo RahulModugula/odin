@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Finding, AgentStatuses, CodeMetrics } from '../types';
 import { ScoreGauge } from './ScoreGauge';
 import { MetricsPanel } from './MetricsPanel';
@@ -22,6 +23,14 @@ const SEVERITY_ORDER: Record<string, number> = {
   medium: 2,
   low: 3,
   info: 4,
+};
+
+const SEVERITY_CHIP_STYLES: Record<string, string> = {
+  critical: 'bg-red-950/70 text-red-400 ring-1 ring-red-500/30 hover:ring-red-400/60',
+  high:     'bg-orange-950/70 text-orange-400 ring-1 ring-orange-500/30 hover:ring-orange-400/60',
+  medium:   'bg-amber-950/70 text-amber-400 ring-1 ring-amber-500/30 hover:ring-amber-400/60',
+  low:      'bg-blue-950/70 text-blue-400 ring-1 ring-blue-500/30 hover:ring-blue-400/60',
+  info:     'bg-gray-800 text-gray-400 ring-1 ring-gray-600/30 hover:ring-gray-500/60',
 };
 
 function countFindingsByAgent(findings: Finding[]): { quality: number; security: number; docs: number } {
@@ -50,6 +59,8 @@ export function ReviewResults({
   totalTime,
   hasStarted,
 }: ReviewResultsProps) {
+  const [severityFilter, setSeverityFilter] = useState<string | null>(null);
+
   if (error) {
     return (
       <div className="flex items-center justify-center h-full p-8">
@@ -78,6 +89,16 @@ export function ReviewResults({
   );
   const findingCounts = countFindingsByAgent(findings);
 
+  // Counts per severity for filter chip labels
+  const severityCounts = sortedFindings.reduce<Record<string, number>>((acc, f) => {
+    acc[f.severity] = (acc[f.severity] ?? 0) + 1;
+    return acc;
+  }, {});
+  const visibleSeverities = Object.keys(SEVERITY_ORDER).filter(s => severityCounts[s] > 0);
+  const filteredFindings = severityFilter
+    ? sortedFindings.filter(f => f.severity === severityFilter)
+    : sortedFindings;
+
   return (
     <div className="flex flex-col gap-5 h-full overflow-y-auto pr-1 scrollbar-thin">
       <AgentProgress statuses={agentStatuses} findingCounts={findingCounts} />
@@ -100,10 +121,35 @@ export function ReviewResults({
 
       {sortedFindings.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Findings ({sortedFindings.length})
-          </h3>
-          {sortedFindings.map((finding, idx) => (
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              Findings ({filteredFindings.length}{severityFilter ? `/${sortedFindings.length}` : ''})
+            </h3>
+            {visibleSeverities.length > 1 && (
+              <div className="flex items-center gap-1 flex-wrap ml-auto">
+                {severityFilter && (
+                  <button
+                    onClick={() => setSeverityFilter(null)}
+                    className="text-[10px] px-2 py-0.5 rounded bg-gray-700/60 text-gray-400 hover:text-gray-200 transition-colors"
+                  >
+                    Clear
+                  </button>
+                )}
+                {visibleSeverities.map(sev => (
+                  <button
+                    key={sev}
+                    onClick={() => setSeverityFilter(sev === severityFilter ? null : sev)}
+                    className={`text-[10px] font-bold px-2 py-0.5 rounded tracking-wider transition-all ${
+                      SEVERITY_CHIP_STYLES[sev]
+                    } ${severityFilter === sev ? 'ring-2' : ''}`}
+                  >
+                    {sev.toUpperCase()} {severityCounts[sev]}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {filteredFindings.map((finding, idx) => (
             <FindingCard key={idx} finding={finding} />
           ))}
         </div>
