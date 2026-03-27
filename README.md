@@ -78,21 +78,48 @@ docker compose up
 
 ---
 
+## Web UI — Review in the Browser
+
+**Keyboard shortcuts:**
+- `Cmd+Enter` (Mac) / `Ctrl+Enter` (Linux/Windows) — submit review from editor
+- Settings modal to switch between LM Studio, OpenRouter, OpenAI, or Ollama
+
+---
+
 ## CLI — Review Before You Push
 
 ```bash
 # Review a single file
 python cli/odin_review.py backend/app/main.py --rules-only
 
-# Review staged changes (use as pre-push check)
+# Review staged changes (pre-push check)
 python cli/odin_review.py --staged --rules-only
 
 # Review changes since last commit, full AI review
 python cli/odin_review.py --diff HEAD~1
 
+# Quiet mode for git hooks (suppress banners)
+python cli/odin_review.py --staged --quiet && git push
+
+# Filter by severity and confidence
+python cli/odin_review.py backend/ --min-severity high --min-confidence 0.8
+
+# Output as JSON for CI/scripting
+python cli/odin_review.py --staged --json | jq .
+
 # Install as git pre-push hook
 bash cli/install-hook.sh
 ```
+
+**CLI flags:**
+- `--staged` — review only git staged files
+- `--diff REF` — review changes since a commit/branch (e.g., `HEAD~1`, `origin/main`)
+- `--rules-only` — run deterministic rules only (instant, no LLM)
+- `--quiet` / `-q` — suppress output on clean scans (ideal for CI/hooks)
+- `--min-severity {critical|high|medium|low|info}` — filter by severity
+- `--min-confidence FLOAT` — filter by confidence score (0.0–1.0)
+- `--fail-on {critical|high|...}` — exit 1 if this severity is found
+- `--json` — output findings as JSON
 
 Example output:
 ```
@@ -127,6 +154,10 @@ Summary: 1 finding(s) in 1 file(s)
    ODIN_GITHUB_TOKEN=ghp_...
    ODIN_GITHUB_WEBHOOK_SECRET=your-secret
    ```
+
+**Bot commands in PRs:**
+
+Comment `@odin review` to trigger a fresh review, or `@odin help` to see all commands.
 
 Odin will post reviews like this on every PR:
 
