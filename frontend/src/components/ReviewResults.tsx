@@ -62,11 +62,35 @@ export function ReviewResults({
   const [severityFilter, setSeverityFilter] = useState<string | null>(null);
 
   if (error) {
+    const hint = (() => {
+      if (/failed to fetch|networkerror|load failed/i.test(error)) {
+        return 'Could not reach the Odin backend. Make sure it is running: docker compose up';
+      }
+      if (/server error: 503/i.test(error)) {
+        return 'The backend is up but the LLM provider is unreachable. Check your provider settings.';
+      }
+      if (/server error: 422/i.test(error)) {
+        return 'The server rejected the request — make sure the code field is not empty.';
+      }
+      if (/server error: 401/i.test(error)) {
+        return 'Authentication failed. Check your API key in the provider settings.';
+      }
+      return 'Check the browser console for details, or try refreshing the page.';
+    })();
+
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <div className="bg-red-950/30 border border-red-500/20 rounded-xl p-6 text-center max-w-md">
-          <div className="text-red-400 text-lg font-semibold mb-2">Review Failed</div>
-          <p className="text-red-300/80 text-sm">{error}</p>
+        <div className="bg-red-950/30 border border-red-500/20 rounded-xl p-6 max-w-md space-y-3">
+          <div className="flex items-center gap-2">
+            <svg className="w-5 h-5 text-red-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+            <div className="text-red-400 text-sm font-semibold">Review failed</div>
+          </div>
+          <p className="text-red-300/70 text-xs font-mono break-all">{error}</p>
+          <div className="bg-amber-950/30 border border-amber-500/15 rounded-lg px-3 py-2.5">
+            <p className="text-xs text-amber-200/80">💡 {hint}</p>
+          </div>
         </div>
       </div>
     );
