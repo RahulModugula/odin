@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { CodeInput } from './components/CodeInput';
 import { ReviewResults } from './components/ReviewResults';
 import { SettingsModal } from './components/SettingsModal';
+import { KeyboardHelp } from './components/KeyboardHelp';
 import { useReviewStream } from './hooks/useReviewStream';
 import type { ReviewRequest } from './types';
 
@@ -18,6 +19,7 @@ function App() {
   const [language, setLanguage] = useState<ReviewRequest['language']>('python');
   const [hasStarted, setHasStarted] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [activeProvider, setActiveProvider] = useState('default');
 
   // Fetch current provider from backend on mount
@@ -26,6 +28,19 @@ function App() {
       .then(r => r.json())
       .then(d => setActiveProvider(d.provider || 'default'))
       .catch(() => {});
+  }, []);
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // ? key toggles help (unless in a text field)
+      if (e.key === '?' && !(e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLInputElement)) {
+        e.preventDefault();
+        setHelpOpen(o => !o);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   const { findings, agentStatuses, score, summary, isLoading, error, metrics, totalTime, startReview, reset } =
@@ -75,6 +90,14 @@ function App() {
           </svg>
         </button>
 
+        <button
+          onClick={() => setHelpOpen(true)}
+          className="flex items-center justify-center w-7 h-7 rounded-lg text-xs text-gray-600 hover:text-gray-400 border border-gray-700/40 hover:border-gray-600 transition-all"
+          title="Keyboard shortcuts (press ?)"
+        >
+          ?
+        </button>
+
         {hasStarted && (
           <button
             onClick={handleReset}
@@ -121,6 +144,10 @@ function App() {
         onClose={() => setSettingsOpen(false)}
         currentProvider={activeProvider}
         onProviderChange={setActiveProvider}
+      />
+      <KeyboardHelp
+        isOpen={helpOpen}
+        onClose={() => setHelpOpen(false)}
       />
     </div>
   );
