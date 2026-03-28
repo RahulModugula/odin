@@ -15,7 +15,7 @@ from app.agents.graph import review_graph
 from app.agents.llm import test_provider
 from app.config import settings
 from app.models.enums import Language
-from app.models.schemas import ReviewRequest, ReviewResult
+from app.models.schemas import Finding, ReviewRequest, ReviewResult
 from app.models.state import ReviewState
 from app.observability.tracing import create_langfuse_handler
 from app.parsers.languages import supported_languages
@@ -116,6 +116,26 @@ async def _try_cache_set(code: str, language: str, result: ReviewResult) -> None
         pass
 
 
+async def _apply_feedback_suppressions(findings: list[Finding], language: str) -> list[Finding]:
+    """Remove findings that users have repeatedly flagged as false positives."""
+    try:
+        from redis.asyncio import Redis
+
+        from app.config import settings
+        from app.services.feedback import FeedbackService
+
+        redis: Redis = Redis.from_url(settings.redis_url, decode_responses=False)
+        service = FeedbackService(redis)
+        filtered = []
+        for f in findings:
+            if not await service.is_suppressed(f.category.value, f.title, language):
+                filtered.append(f)
+        await redis.aclose()
+        return filtered
+    except Exception:
+        return findings  # graceful fallback — return all findings
+
+
 # ---------------------------------------------------------------------------
 # Review (non-streaming)
 # ---------------------------------------------------------------------------
@@ -162,6 +182,9 @@ async def create_review(request: ReviewRequest) -> JSONResponse:
     findings = result["findings"]
     if settings.min_confidence > 0:
         findings = [f for f in findings if f.confidence >= settings.min_confidence]
+
+    # Filter out findings suppressed by user feedback (3+ false_positive votes)
+    findings = await _apply_feedback_suppressions(findings, request.language.value)
 
     review_result = ReviewResult(
         id=review_id,
