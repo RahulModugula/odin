@@ -18,10 +18,10 @@ class RegexInLoopRule(Rule):
     category = Category.PERFORMANCE
     languages = [Language.PYTHON, Language.JAVASCRIPT, Language.TYPESCRIPT]
 
-    # Python: re.compile / re.match / re.search inside a for/while block
-    _PY_REGEX = re.compile(r"\bre\.(compile|match|search|findall|sub|fullmatch)\s*\(")
+    # Only flag re.compile() inside loops — not in string literals or comments
+    _PY_COMPILE_IN_LOOP = re.compile(r"\bre\.compile\s*\(")
     _JS_REGEX = re.compile(r"\bnew\s+RegExp\s*\(")
-    _LOOP = re.compile(r"\b(for|while)\b")
+    _LOOP_START = re.compile(r"^\s*(for|while)\b")
 
     def check(
         self,
@@ -32,67 +32,75 @@ class RegexInLoopRule(Rule):
     ) -> list[Finding]:
         findings: list[Finding] = []
         lines = code.splitlines()
-        nesting = 0
+
+        # Track loop blocks by indentation level
+        loop_indent: list[int] = []  # stack of indent levels where loops start
 
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
-            if stripped.startswith("#") or stripped.startswith("//"):
+            if not stripped or stripped.startswith("#") or stripped.startswith("//"):
                 continue
 
-            if self._LOOP.search(stripped):
-                nesting += 1
+            indent = len(line) - len(line.lstrip())
 
-            if nesting > 0:
-                if language == Language.PYTHON and self._PY_REGEX.search(line):
-                    findings.append(
-                        Finding(
-                            severity=self.severity,
-                            category=self.category,
-                            title="Regex compiled inside loop",
-                            description=(
-                                f"Line {i}: `re.compile()` or similar called inside a loop. "
-                                "Every iteration compiles the regex pattern, adding unnecessary CPU work."
-                            ),
-                            line_start=i,
-                            line_end=i,
-                            suggestion=(
-                                "Compile the regex once before the loop: "
-                                "`pattern = re.compile(r'...')` then use `pattern.search(text)` inside."
-                            ),
-                            confidence=0.82,
-                        )
-                    )
-                elif language in (
-                    Language.JAVASCRIPT,
-                    Language.TYPESCRIPT,
-                ) and self._JS_REGEX.search(line):
-                    findings.append(
-                        Finding(
-                            severity=self.severity,
-                            category=self.category,
-                            title="RegExp instantiated inside loop",
-                            description=(
-                                f"Line {i}: `new RegExp(...)` called inside a loop. "
-                                "Each iteration compiles the pattern unnecessarily."
-                            ),
-                            line_start=i,
-                            line_end=i,
-                            suggestion=(
-                                "Move `new RegExp(...)` outside the loop or use a regex literal "
-                                "(`/pattern/`) which is cached by the engine."
-                            ),
-                            confidence=0.82,
-                        )
-                    )
+            # Pop loops we've exited (current indent <= loop indent)
+            while loop_indent and indent <= loop_indent[-1]:
+                loop_indent.pop()
 
-            # Rough dedent tracking for Python
+            # Detect loop start
+            if self._LOOP_START.match(line):
+                loop_indent.append(indent)
+                continue
+
+            # Only flag if we're inside a loop body
+            if not loop_indent:
+                continue
+
             if (
                 language == Language.PYTHON
-                and nesting > 0
-                and stripped
-                and not stripped.endswith(":")
+                and self._PY_COMPILE_IN_LOOP.search(line)
+                and not stripped.startswith(("'", '"', "f'", 'f"', "`"))
             ):
-                pass  # simple approximation; tree-sitter can do better
+                findings.append(
+                    Finding(
+                        severity=self.severity,
+                        category=self.category,
+                        title="Regex compiled inside loop",
+                        description=(
+                            f"Line {i}: `re.compile()` called inside a loop. "
+                            "Every iteration compiles the regex, adding unnecessary CPU work."
+                        ),
+                        line_start=i,
+                        line_end=i,
+                        suggestion=(
+                            "Compile the regex once before the loop: "
+                            "`pattern = re.compile(r'...')` then use `pattern.search(text)` inside."
+                        ),
+                        confidence=0.82,
+                    )
+                )
+            elif language in (
+                Language.JAVASCRIPT,
+                Language.TYPESCRIPT,
+            ) and self._JS_REGEX.search(line):
+                findings.append(
+                    Finding(
+                        severity=self.severity,
+                        category=self.category,
+                        title="RegExp instantiated inside loop",
+                        description=(
+                            f"Line {i}: `new RegExp(...)` called inside a loop. "
+                            "Each iteration compiles the pattern unnecessarily."
+                        ),
+                        line_start=i,
+                        line_end=i,
+                        suggestion=(
+                            "Move `new RegExp(...)` outside the loop or use a regex literal "
+                            "(`/pattern/`) which is cached by the engine."
+                        ),
+                        confidence=0.82,
+                    )
+                )
 
         return findings
 
