@@ -12,13 +12,29 @@ from app.rules.registry import register_all
 @pytest.fixture()
 def engine() -> RuleEngine:
     """A freshly initialized rule engine for each test."""
-    from app.rules.builtin import cross_language_rules, js_rules, python_rules
+    from app.rules.builtin import (
+        cross_language_rules,
+        go_rules,
+        java_rules,
+        js_rules,
+        performance_rules,
+        python_rules,
+        rust_rules,
+    )
     from app.rules.engine import RuleEngine
 
     eng = RuleEngine()
     for rule in python_rules.ALL_RULES:
         eng.register(rule)
     for rule in js_rules.ALL_RULES:
+        eng.register(rule)
+    for rule in go_rules.ALL_RULES:
+        eng.register(rule)
+    for rule in java_rules.ALL_RULES:
+        eng.register(rule)
+    for rule in rust_rules.ALL_RULES:
+        eng.register(rule)
+    for rule in performance_rules.ALL_RULES:
         eng.register(rule)
     for rule in cross_language_rules.ALL_RULES:
         eng.register(rule)
@@ -326,3 +342,128 @@ def test_prototype_pollution_guarded_merge_no_finding(engine: RuleEngine) -> Non
     )
     findings = engine.check_all(code, Language.JAVASCRIPT)
     assert not any("pollution" in f.title.lower() for f in findings)
+
+
+# ── Go rules ──────────────────────────────────────────────────────────────────
+
+
+def test_go001_error_ignored(engine: RuleEngine) -> None:
+    code = "result, _ := os.Open(filename)\n"
+    findings = engine.check_all(code, Language.GO)
+    assert any("error" in f.title.lower() or "discarded" in f.title.lower() for f in findings)
+
+
+def test_go002_panic_in_library(engine: RuleEngine) -> None:
+    code = "package mylib\n\nfunc Process(x int) {\n    if x < 0 {\n        panic(\"negative\")\n    }\n}\n"
+    findings = engine.check_all(code, Language.GO)
+    assert any("panic" in f.title.lower() for f in findings)
+
+
+def test_go002_panic_in_main_ok(engine: RuleEngine) -> None:
+    code = "package main\n\nfunc main() {\n    panic(\"fatal\")\n}\n"
+    findings = engine.check_all(code, Language.GO)
+    assert not any("panic" in f.title.lower() for f in findings)
+
+
+def test_go004_sql_injection(engine: RuleEngine) -> None:
+    code = 'query := fmt.Sprintf("SELECT * FROM users WHERE id = %d", userID)\n'
+    findings = engine.check_all(code, Language.GO)
+    assert any("sql" in f.title.lower() for f in findings)
+
+
+def test_go005_mutex_without_defer(engine: RuleEngine) -> None:
+    code = "func (s *Server) handle() {\n    s.mu.Lock()\n    s.count++\n    s.mu.Unlock()\n}\n"
+    findings = engine.check_all(code, Language.GO)
+    assert any("mutex" in f.title.lower() or "lock" in f.title.lower() for f in findings)
+
+
+def test_go005_mutex_with_defer_ok(engine: RuleEngine) -> None:
+    code = "func (s *Server) handle() {\n    s.mu.Lock()\n    defer s.mu.Unlock()\n    s.count++\n}\n"
+    findings = engine.check_all(code, Language.GO)
+    assert not any("mutex" in f.title.lower() for f in findings)
+
+
+# ── Java rules ────────────────────────────────────────────────────────────────
+
+
+def test_ja001_system_out(engine: RuleEngine) -> None:
+    code = 'System.out.println("debug value: " + x);\n'
+    findings = engine.check_all(code, Language.JAVA)
+    assert any("system.out" in f.title.lower() for f in findings)
+
+
+def test_ja003_resource_leak(engine: RuleEngine) -> None:
+    code = "FileInputStream fis = new FileInputStream(path);\n"
+    findings = engine.check_all(code, Language.JAVA)
+    assert any("resource" in f.title.lower() or "leak" in f.title.lower() for f in findings)
+
+
+def test_ja003_try_with_resources_ok(engine: RuleEngine) -> None:
+    code = "try (FileInputStream fis = new FileInputStream(path)) {\n    // use fis\n}\n"
+    findings = engine.check_all(code, Language.JAVA)
+    assert not any("leak" in f.title.lower() for f in findings)
+
+
+def test_ja004_broad_catch(engine: RuleEngine) -> None:
+    code = "try {\n    doSomething();\n} catch (Exception e) {\n    e.printStackTrace();\n}\n"
+    findings = engine.check_all(code, Language.JAVA)
+    assert any("broad" in f.title.lower() or "exception" in f.title.lower() for f in findings)
+
+
+def test_ja005_sql_injection_java(engine: RuleEngine) -> None:
+    code = 'String q = "SELECT * FROM users WHERE name = \'" + name + "\'";\n'
+    findings = engine.check_all(code, Language.JAVA)
+    assert any("sql" in f.title.lower() for f in findings)
+
+
+# ── Rust rules ────────────────────────────────────────────────────────────────
+
+
+def test_rs001_unwrap(engine: RuleEngine) -> None:
+    code = "let file = File::open(path).unwrap();\n"
+    findings = engine.check_all(code, Language.RUST)
+    assert any("unwrap" in f.title.lower() for f in findings)
+
+
+def test_rs002_unsafe_block(engine: RuleEngine) -> None:
+    code = "let result = unsafe { *raw_ptr };\n"
+    findings = engine.check_all(code, Language.RUST)
+    assert any("unsafe" in f.title.lower() for f in findings)
+
+
+def test_rs003_todo_macro(engine: RuleEngine) -> None:
+    code = "fn process() -> Result<(), Error> {\n    todo!()\n}\n"
+    findings = engine.check_all(code, Language.RUST)
+    assert any("todo" in f.title.lower() for f in findings)
+
+
+# ── Performance / security cross-language rules ───────────────────────────────
+
+
+def test_perf003_weak_crypto_md5(engine: RuleEngine) -> None:
+    code = "import hashlib\npassword_hash = hashlib.md5(password.encode()).hexdigest()\n"
+    findings = engine.check_all(code, Language.PYTHON)
+    assert any("md5" in f.title.lower() or "weak" in f.title.lower() for f in findings)
+
+
+def test_perf003_weak_crypto_sha1_java(engine: RuleEngine) -> None:
+    code = 'MessageDigest md = MessageDigest.getInstance("SHA-1");\n'
+    findings = engine.check_all(code, Language.JAVA)
+    assert any("sha-1" in f.title.lower() or "weak" in f.title.lower() for f in findings)
+
+
+def test_perf005_sensitive_data_logged(engine: RuleEngine) -> None:
+    code = 'logging.info(f"User password: {password}")\n'
+    findings = engine.check_all(code, Language.PYTHON)
+    assert any("sensitive" in f.title.lower() or "log" in f.title.lower() for f in findings)
+
+
+def test_perf004_path_traversal(engine: RuleEngine) -> None:
+    code = (
+        "from flask import request\n"
+        "filename = request.args.get('file')\n"
+        "with open(filename) as f:\n"
+        "    data = f.read()\n"
+    )
+    findings = engine.check_all(code, Language.PYTHON)
+    assert any("path" in f.title.lower() or "traversal" in f.title.lower() for f in findings)
