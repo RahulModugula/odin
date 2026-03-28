@@ -354,13 +354,13 @@ def test_go001_error_ignored(engine: RuleEngine) -> None:
 
 
 def test_go002_panic_in_library(engine: RuleEngine) -> None:
-    code = "package mylib\n\nfunc Process(x int) {\n    if x < 0 {\n        panic(\"negative\")\n    }\n}\n"
+    code = 'package mylib\n\nfunc Process(x int) {\n    if x < 0 {\n        panic("negative")\n    }\n}\n'
     findings = engine.check_all(code, Language.GO)
     assert any("panic" in f.title.lower() for f in findings)
 
 
 def test_go002_panic_in_main_ok(engine: RuleEngine) -> None:
-    code = "package main\n\nfunc main() {\n    panic(\"fatal\")\n}\n"
+    code = 'package main\n\nfunc main() {\n    panic("fatal")\n}\n'
     findings = engine.check_all(code, Language.GO)
     assert not any("panic" in f.title.lower() for f in findings)
 
@@ -378,7 +378,9 @@ def test_go005_mutex_without_defer(engine: RuleEngine) -> None:
 
 
 def test_go005_mutex_with_defer_ok(engine: RuleEngine) -> None:
-    code = "func (s *Server) handle() {\n    s.mu.Lock()\n    defer s.mu.Unlock()\n    s.count++\n}\n"
+    code = (
+        "func (s *Server) handle() {\n    s.mu.Lock()\n    defer s.mu.Unlock()\n    s.count++\n}\n"
+    )
     findings = engine.check_all(code, Language.GO)
     assert not any("mutex" in f.title.lower() for f in findings)
 

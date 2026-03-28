@@ -238,24 +238,24 @@ class JWTMisuseRule(Rule):
 
             # jwt.decode() without a nearby jwt.verify() is dangerous
             if self._DECODE_NO_VERIFY.search(line) and not self._VERIFY.search(code):
-                    findings.append(
-                        Finding(
-                            severity=self.severity,
-                            category=self.category,
-                            title="`jwt.decode()` skips signature verification",
-                            description=(
-                                f"Line {i}: `jwt.decode()` does not verify the token signature. "
-                                "Any claims in the payload can be forged. CWE-347."
-                            ),
-                            line_start=i,
-                            line_end=i,
-                            suggestion=(
-                                "Use `jwt.verify(token, secret, {{ algorithms: ['HS256'] }})` "
-                                "instead. Never trust payload data from `jwt.decode()`."
-                            ),
-                            confidence=0.9,
-                        )
+                findings.append(
+                    Finding(
+                        severity=self.severity,
+                        category=self.category,
+                        title="`jwt.decode()` skips signature verification",
+                        description=(
+                            f"Line {i}: `jwt.decode()` does not verify the token signature. "
+                            "Any claims in the payload can be forged. CWE-347."
+                        ),
+                        line_start=i,
+                        line_end=i,
+                        suggestion=(
+                            "Use `jwt.verify(token, secret, {{ algorithms: ['HS256'] }})` "
+                            "instead. Never trust payload data from `jwt.decode()`."
+                        ),
+                        confidence=0.9,
                     )
+                )
 
             # jwt.verify() without algorithms option is vulnerable to algorithm confusion
             if self._VERIFY.search(line) and not self._ALGORITHMS_OPT.search(code):

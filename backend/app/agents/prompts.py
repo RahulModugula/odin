@@ -148,11 +148,7 @@ def build_review_prompt(
 
     instruction = (
         "Analyze the code and provide your findings as structured output. "
-        + (
-            "Focus on the CHANGED lines shown in the diff above. "
-            if diff.strip()
-            else ""
-        )
+        + ("Focus on the CHANGED lines shown in the diff above. " if diff.strip() else "")
         + "Each finding must include severity, category, title, description, and line numbers where applicable."
     )
     sections.append(instruction)

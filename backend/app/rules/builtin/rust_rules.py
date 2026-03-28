@@ -54,7 +54,7 @@ class RustUnwrapRule(Rule):
                         line_end=i,
                         suggestion=(
                             "Use the `?` operator to propagate errors, `.unwrap_or(default)`, "
-                            "`.unwrap_or_else(|| ...)`, or `.expect(\"descriptive message\")`."
+                            '`.unwrap_or_else(|| ...)`, or `.expect("descriptive message")`.'
                         ),
                         confidence=0.85,
                     )
@@ -244,7 +244,7 @@ class RustExpectWithoutMessageRule(Rule):
                         line_start=i,
                         line_end=i,
                         suggestion=(
-                            'Use a descriptive message explaining what was expected: '
+                            "Use a descriptive message explaining what was expected: "
                             '`.expect("config file must be readable at startup")`'
                         ),
                         confidence=0.75,

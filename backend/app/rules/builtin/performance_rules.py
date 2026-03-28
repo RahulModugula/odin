@@ -62,7 +62,10 @@ class RegexInLoopRule(Rule):
                             confidence=0.82,
                         )
                     )
-                elif language in (Language.JAVASCRIPT, Language.TYPESCRIPT) and self._JS_REGEX.search(line):
+                elif language in (
+                    Language.JAVASCRIPT,
+                    Language.TYPESCRIPT,
+                ) and self._JS_REGEX.search(line):
                     findings.append(
                         Finding(
                             severity=self.severity,
@@ -83,7 +86,12 @@ class RegexInLoopRule(Rule):
                     )
 
             # Rough dedent tracking for Python
-            if language == Language.PYTHON and nesting > 0 and stripped and not stripped.endswith(":"):
+            if (
+                language == Language.PYTHON
+                and nesting > 0
+                and stripped
+                and not stripped.endswith(":")
+            ):
                 pass  # simple approximation; tree-sitter can do better
 
         return findings
@@ -160,8 +168,8 @@ class WeakCryptoHashRule(Rule):
         re.compile(r"\b(md5|MD5)\b"),
         re.compile(r'\bhashlib\.new\s*\(\s*["\']md5["\']'),
         re.compile(r'\bhashlib\.new\s*\(\s*["\']sha1["\']'),
-        re.compile(r'\bhashlib\.md5\s*\('),
-        re.compile(r'\bhashlib\.sha1\s*\('),
+        re.compile(r"\bhashlib\.md5\s*\("),
+        re.compile(r"\bhashlib\.sha1\s*\("),
         re.compile(r"\bMessageDigest\.getInstance\s*\(\s*\"(MD5|SHA-1|SHA1)\""),
         re.compile(r"\bcrypto\.createHash\s*\(\s*['\"]md5['\"]"),
         re.compile(r"\bcrypto\.createHash\s*\(\s*['\"]sha1['\"]"),
@@ -193,7 +201,11 @@ class WeakCryptoHashRule(Rule):
                     window_end = min(len(lines), i + 5)
                     window = "\n".join(lines[window_start:window_end])
                     # Always flag if in a security context; also flag bare MD5 imports
-                    if self._SECURITY_CTX.search(window) or "hashlib.md5" in line or "MessageDigest" in line:
+                    if (
+                        self._SECURITY_CTX.search(window)
+                        or "hashlib.md5" in line
+                        or "MessageDigest" in line
+                    ):
                         findings.append(
                             Finding(
                                 severity=self.severity,
@@ -208,7 +220,7 @@ class WeakCryptoHashRule(Rule):
                                 line_end=i,
                                 suggestion=(
                                     "Use SHA-256 or SHA-3: `hashlib.sha256()` (Python), "
-                                    "`MessageDigest.getInstance(\"SHA-256\")` (Java), "
+                                    '`MessageDigest.getInstance("SHA-256")` (Java), '
                                     "`crypto.createHash('sha256')` (Node.js). "
                                     "For passwords, use bcrypt, scrypt, or Argon2."
                                 ),
@@ -226,7 +238,13 @@ class PathTraversalRule(Rule):
     name = "Potential path traversal"
     severity = Severity.HIGH
     category = Category.SECURITY
-    languages = [Language.PYTHON, Language.JAVASCRIPT, Language.TYPESCRIPT, Language.JAVA, Language.GO]
+    languages = [
+        Language.PYTHON,
+        Language.JAVASCRIPT,
+        Language.TYPESCRIPT,
+        Language.JAVA,
+        Language.GO,
+    ]
 
     _FILE_OPS = re.compile(
         r"\b(open|os\.path\.(join|exists|isfile)|pathlib\.Path|"
@@ -296,7 +314,7 @@ class SensitiveDataLoggingRule(Rule):
         r"\b(log|logger|logging|console)\.(debug|info|warn|warning|error|critical|log)\s*\(|"
         r"\bprint\s*\(|"
         r"\bSystem\.out\.(print|println)\s*\(|"
-        r'\bfmt\.(Print|Println|Printf)\s*\('
+        r"\bfmt\.(Print|Println|Printf)\s*\("
     )
     _SENSITIVE = re.compile(
         r"(?i)(password|passwd|secret|api_key|apikey|token|auth|credential|"

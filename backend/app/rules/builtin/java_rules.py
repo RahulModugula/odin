@@ -47,7 +47,7 @@ class JavaSystemOutRule(Rule):
                         suggestion=(
                             "Replace with SLF4J/Logback: "
                             "`private static final Logger log = LoggerFactory.getLogger(Foo.class);` "
-                            "then `log.info(\"message\");`"
+                            'then `log.info("message");`'
                         ),
                         confidence=0.92,
                     )
@@ -79,7 +79,11 @@ class JavaRawTypeRule(Rule):
         findings: list[Finding] = []
         for i, line in enumerate(code.splitlines(), 1):
             stripped = line.strip()
-            if stripped.startswith("//") or stripped.startswith("*") or stripped.startswith("import"):
+            if (
+                stripped.startswith("//")
+                or stripped.startswith("*")
+                or stripped.startswith("import")
+            ):
                 continue
             m = self._pattern.search(line)
             if m:
@@ -137,7 +141,7 @@ class JavaResourceLeakRule(Rule):
             if m:
                 # Check surrounding 3 lines for try-with-resources
                 window_start = max(0, i - 3)
-                window = "\n".join(lines[window_start : i])
+                window = "\n".join(lines[window_start:i])
                 if not self._TRY_RESOURCE.search(window):
                     resource = m.group(1)
                     findings.append(
@@ -218,7 +222,7 @@ class JavaSQLInjectionRule(Rule):
     category = Category.SECURITY
     languages = [Language.JAVA]
 
-    _SQL_KEYWORDS = re.compile(r'(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)\s')
+    _SQL_KEYWORDS = re.compile(r"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)\s")
     _CONCAT = re.compile(r'"\s*\+\s*\w+|\bString\.format\s*\(')
 
     def check(

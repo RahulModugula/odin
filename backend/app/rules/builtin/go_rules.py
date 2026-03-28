@@ -112,7 +112,7 @@ class GoPanicInLibraryRule(Rule):
                         line_end=i,
                         suggestion=(
                             "Return an `error` instead of panicking: "
-                            "`return nil, fmt.Errorf(\"invalid input: %w\", err)`"
+                            '`return nil, fmt.Errorf("invalid input: %w", err)`'
                         ),
                         confidence=0.82,
                     )
@@ -184,8 +184,8 @@ class GoSQLInjectionRule(Rule):
     category = Category.SECURITY
     languages = [Language.GO]
 
-    _SQL_KEYWORDS = re.compile(r'(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)\s')
-    _FMT_INTERP = re.compile(r'fmt\.(Sprintf|Fprintf)\s*\(|string\s*\+|%[sdvf]')
+    _SQL_KEYWORDS = re.compile(r"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|ALTER)\s")
+    _FMT_INTERP = re.compile(r"fmt\.(Sprintf|Fprintf)\s*\(|string\s*\+|%[sdvf]")
 
     def check(
         self,
@@ -213,7 +213,7 @@ class GoSQLInjectionRule(Rule):
                         line_end=i,
                         suggestion=(
                             "Use parameterized queries: "
-                            "`db.QueryContext(ctx, \"SELECT * FROM users WHERE id = $1\", id)`"
+                            '`db.QueryContext(ctx, "SELECT * FROM users WHERE id = $1", id)`'
                         ),
                         confidence=0.85,
                     )
@@ -335,9 +335,7 @@ class GoHardcodedIPRule(Rule):
     category = Category.MAINTAINABILITY
     languages = [Language.GO]
 
-    _IP_PATTERN = re.compile(
-        r'["\'](\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})["\']'
-    )
+    _IP_PATTERN = re.compile(r'["\'](\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})["\']')
     _ALLOWED = {"0.0.0.0", "127.0.0.1", "255.255.255.255"}
 
     def check(
