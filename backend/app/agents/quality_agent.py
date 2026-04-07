@@ -22,6 +22,7 @@ class QualityFinding(BaseModel):
     line_start: int | None = None
     line_end: int | None = None
     suggestion: str | None = None
+    fix_code: str | None = None
     confidence: float = Field(ge=0.0, le=1.0, default=0.8)
 
 
@@ -64,6 +65,7 @@ async def run_quality_agent(
                 line_start=f.line_start,
                 line_end=f.line_end,
                 suggestion=f.suggestion,
+                fix_code=f.fix_code,
                 confidence=f.confidence,
                 source="ai",
             )

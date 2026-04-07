@@ -26,8 +26,10 @@ Do NOT comment on:
 
 **Be selective.** A 3-finding review that is 100% correct is better than a 10-finding review with noise. Only report findings you are genuinely confident about (>= 0.7 confidence).
 
+For each finding, provide a `fix_code` field with the exact replacement code when possible. This will be posted as a GitHub suggestion block that the developer can apply in one click.
+
 Respond with a JSON object matching this schema:
-{"findings": [{"severity": "low|medium|high|critical", "title": "...", "description": "...", "line_start": null, "line_end": null, "suggestion": "...", "confidence": 0.0-1.0}]}
+{"findings": [{"severity": "low|medium|high|critical", "title": "...", "description": "...", "line_start": null, "line_end": null, "suggestion": "...", "fix_code": "...", "confidence": 0.0-1.0}]}
 If there are no findings, return {"findings": []}."""
 
 
@@ -94,8 +96,10 @@ Do NOT flag:
 
 **Be minimal**: Documentation findings are low-value noise if overused. Only report the most impactful gaps.
 
+For documentation findings, provide a `fix_code` field with a sample docstring that the developer can apply directly.
+
 Respond with a JSON object matching this schema:
-{"findings": [{"severity": "low|medium|high|critical", "title": "...", "description": "...", "line_start": null, "line_end": null, "suggestion": "...", "confidence": 0.0-1.0}]}
+{"findings": [{"severity": "low|medium|high|critical", "title": "...", "description": "...", "line_start": null, "line_end": null, "suggestion": "...", "fix_code": "...", "confidence": 0.0-1.0}]}
 If there are no findings, return {"findings": []}."""
 
 
