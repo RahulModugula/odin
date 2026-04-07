@@ -28,6 +28,13 @@ class Settings(BaseSettings):
     github_webhook_secret: str = ""
     webhook_max_file_bytes: int = 100_000
 
+    # GitHub App integration (one-click install flow)
+    github_app_id: str = ""
+    github_app_client_id: str = ""
+    github_app_client_secret: str = ""
+    github_app_private_key: str = ""  # PEM content, newlines as \n
+    github_app_webhook_secret: str = ""
+
     # MCP server
     mcp_enabled: bool = True
 
