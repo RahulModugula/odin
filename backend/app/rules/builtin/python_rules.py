@@ -47,6 +47,7 @@ class BareExceptRule(Rule):
                             "Catch specific exception types: `except ValueError:` "
                             "or `except (TypeError, ValueError):`"
                         ),
+                        fix_code=line.replace("except:", "except Exception:"),
                         confidence=0.95,
                     )
                 )
@@ -229,6 +230,7 @@ class SqlStringFormattingRule(Rule):
                                 "Use parameterized queries: "
                                 "`cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))`"
                             ),
+                            fix_code="cursor.execute(\"SELECT * FROM users WHERE id = %s\", (user_id,))",
                             confidence=0.8,
                         )
                     )

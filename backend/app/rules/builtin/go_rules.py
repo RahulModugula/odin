@@ -63,6 +63,12 @@ class GoErrorIgnoredRule(Rule):
                             "Assign the error to a variable and check it: "
                             "`result, err := f(); if err != nil { return err }`"
                         ),
+                        fix_code=re.sub(
+                            r",\s*_\s*(:?=)",
+                            r", err \1",
+                            line,
+                        ).rstrip()
+                        + "\n\tif err != nil {\n\t\treturn err\n\t}",
                         confidence=0.88,
                     )
                 )

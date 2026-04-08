@@ -126,6 +126,11 @@ class XSSPatternRule(Rule):
                             "Use textContent instead of innerHTML, or sanitize with "
                             "DOMPurify before inserting HTML."
                         ),
+                        fix_code=re.sub(
+                            r"\.(innerHTML|outerHTML)\s*=",
+                            ".textContent =",
+                            line,
+                        ).rstrip(),
                         confidence=0.85,
                     )
                 )
