@@ -30,8 +30,12 @@ dependencies = [
 
 [project.scripts]
 odin-mcp = "app.mcp.stdio_runner:main"
+odin = "app.cli.review:main"
 
 [project.optional-dependencies]
+cli = [
+    "colorama>=0.4.6",
+]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24.0",
