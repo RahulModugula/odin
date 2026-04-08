@@ -51,6 +51,12 @@ class Settings(BaseSettings):
     rules_function_length_threshold: int = 50
     rules_nesting_depth_threshold: int = 4
 
+    # Dataflow-guided LLM triage (LLift/INFERROI architecture)
+    # Enable to run intra-procedural taint analysis + LLM exploitability judgment
+    dataflow_enabled: bool = True
+    dataflow_max_candidates: int = 20         # cap per file before LLM spend
+    dataflow_triage_confidence_floor: float = 0.6  # min confidence to surface finding
+
     # Minimum confidence threshold — findings below this are suppressed (0.0 = show all)
     min_confidence: float = 0.0
 

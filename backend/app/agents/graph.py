@@ -5,8 +5,8 @@ from app.agents.docs_agent import run_docs_agent
 from app.agents.quality_agent import run_quality_agent
 from app.agents.security_agent import run_security_agent
 from app.config import settings
-from app.models.enums import Language, Severity
-from app.models.schemas import CodeMetrics, Finding
+from app.models.enums import Category, Language, Severity
+from app.models.schemas import AgentOutput, CodeMetrics, Finding
 from app.models.state import ReviewState
 from app.parsers.tree_sitter_parser import parse_code
 
@@ -77,7 +77,9 @@ def run_rules_node(state: ReviewState) -> dict:  # type: ignore[type-arg]
 
 
 def fan_out_to_agents(state: ReviewState) -> list[Send]:
-    """Fan out to all three review agents and the rules engine in parallel."""
+    """Fan out to all four branches in parallel:
+      security/quality/docs agents + deterministic rules + dataflow triage.
+    """
     agent_input: dict = {
         "code": state["code"],
         "language": state["language"],
@@ -96,7 +98,8 @@ def fan_out_to_agents(state: ReviewState) -> list[Send]:
         Send("quality_agent", agent_input),
         Send("security_agent", agent_input),
         Send("docs_agent", agent_input),
-        Send("run_rules", state),  # pass full state so the node has code + language
+        Send("run_rules", state),
+        Send("dataflow_triage", state),  # LLift/INFERROI-style taint analysis
     ]
 
 
@@ -228,6 +231,63 @@ def _build_ast_summary(structure) -> str:  # type: ignore[no-untyped-def]
     return "\n".join(lines)
 
 
+async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type-arg]
+    """Dataflow-guided LLM triage — open-source reference impl of LLift/INFERROI.
+
+    Phase A: intra-procedural taint analysis to generate candidates
+    Phase B: feedback suppression (skip known-FP pairs)
+    Phase C: LLM triage — exploitability judgment per candidate
+    Phase D: convert confirmed exploitable paths to Findings
+    """
+    if not settings.dataflow_enabled:
+        return {"findings": [], "agent_outputs": []}
+
+    try:
+        from app.agents.llm import get_llm
+        from app.dataflow.registry import sanitizer_registry, sink_registry, source_registry
+        from app.dataflow.tracker import IntraProceduralTaintTracker
+        from app.dataflow.triage import TRIAGE_CONFIDENCE_FLOOR, triage_all
+
+        lang = Language(state["language"])
+        tracker = IntraProceduralTaintTracker(source_registry, sink_registry, sanitizer_registry, lang)
+        candidates = tracker.analyze(state["code"])
+
+        if not candidates:
+            return {"findings": [], "agent_outputs": []}
+
+        llm = get_llm()
+        verdicts = await triage_all(candidates, llm)
+
+        findings: list[Finding] = []
+        for candidate, verdict in zip(candidates, verdicts, strict=False):
+            if not verdict.exploitable or verdict.confidence < TRIAGE_CONFIDENCE_FLOOR:
+                continue
+            findings.append(Finding(
+                severity=Severity.CRITICAL if verdict.confidence >= 0.85 else Severity.HIGH,
+                category=Category.SECURITY,
+                title=f"Taint flow: {candidate.source.kind.value} → {candidate.sink.kind.value}",
+                description=(
+                    f"Dataflow analysis detected a tainted path from "
+                    f"`{candidate.source.call_pattern or candidate.source.attr_pattern}` "
+                    f"to `{candidate.sink.call_pattern}` (lines "
+                    f"{candidate.source_location[0]}→{candidate.sink_location[0]}). "
+                    f"{verdict.exploit_scenario}"
+                ),
+                line_start=candidate.sink_location[0],
+                line_end=candidate.sink_location[0],
+                suggestion=verdict.suggested_sanitizer,
+                attack_scenario=verdict.exploit_scenario,
+                confidence=verdict.confidence,
+                source="dataflow",
+            ))
+
+        output = AgentOutput(agent_name="dataflow_triage", findings=findings)
+        return {"findings": findings, "agent_outputs": [output]}
+
+    except Exception:
+        return {"findings": [], "agent_outputs": []}
+
+
 # Build the graph
 builder = StateGraph(ReviewState)
 
@@ -237,6 +297,7 @@ builder.add_node("quality_agent", run_quality_agent)
 builder.add_node("security_agent", run_security_agent)
 builder.add_node("docs_agent", run_docs_agent)
 builder.add_node("run_rules", run_rules_node)
+builder.add_node("dataflow_triage", dataflow_triage_node)
 builder.add_node("synthesize", synthesize)
 
 builder.add_edge(START, "parse_code")
@@ -244,12 +305,13 @@ builder.add_edge("parse_code", "enrich_context")
 builder.add_conditional_edges(
     "enrich_context",
     fan_out_to_agents,
-    ["quality_agent", "security_agent", "docs_agent", "run_rules"],
+    ["quality_agent", "security_agent", "docs_agent", "run_rules", "dataflow_triage"],
 )
 builder.add_edge("quality_agent", "synthesize")
 builder.add_edge("security_agent", "synthesize")
 builder.add_edge("docs_agent", "synthesize")
 builder.add_edge("run_rules", "synthesize")
+builder.add_edge("dataflow_triage", "synthesize")
 builder.add_edge("synthesize", END)
 
 review_graph = builder.compile()
