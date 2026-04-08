@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 import time
 from datetime import UTC, datetime
 from typing import Any
@@ -324,6 +325,53 @@ async def _handle_app_pull_request(payload: dict[str, Any]) -> None:
     await process_pr_webhook(owner=owner, repo=repo, pull_number=pull_number, head_sha=head_sha)
 
 
+async def _handle_review_comment_event(payload: dict[str, Any]) -> None:
+    """Process review comment dismissed/resolved events for feedback learning."""
+    action = payload.get("action", "")
+    if action not in {"dismissed", "deleted"}:
+        return
+
+    comment = payload.get("comment", {})
+    body = comment.get("body", "")
+
+    # Extract fingerprint from hidden HTML comment
+    fp_match = re.search(r"<!-- odin:fingerprint:(\w+) -->", body)
+    if not fp_match:
+        return
+
+    fingerprint = fp_match.group(1)
+
+    # Also try to extract taint source/sink signatures for taint-pair suppression
+    taint_match = re.search(r"<!-- odin:taint:(\w+):(\w+) -->", body)
+
+    try:
+        import app.services._feedback_ref as _fb_ref
+
+        feedback_svc = getattr(_fb_ref, "service", None)
+        if feedback_svc is None:
+            return
+
+        if taint_match:
+            await feedback_svc.record_taint_false_positive(
+                source_sig=taint_match.group(1),
+                sink_sig=taint_match.group(2),
+                language="unknown",
+                candidate_id=fingerprint,
+            )
+        else:
+            await feedback_svc.record(
+                finding_id=fingerprint,
+                action="not_helpful",
+                category="unknown",
+                title=body[:50],
+                language="unknown",
+            )
+
+        logger.info("feedback recorded from dismissed comment", fingerprint=fingerprint)
+    except Exception as exc:
+        logger.warning("failed to record comment feedback", error=str(exc))
+
+
 @github_app_router.post("/app/webhook")
 async def github_app_webhook(
     request: Request,
@@ -351,6 +399,10 @@ async def github_app_webhook(
     if event_type == "pull_request":
         background_tasks.add_task(_handle_app_pull_request, payload)
         return {"status": "accepted", "event": "pull_request"}
+
+    if event_type == "pull_request_review_comment":
+        background_tasks.add_task(_handle_review_comment_event, payload)
+        return {"status": "accepted", "event": "pull_request_review_comment"}
 
     logger.debug("app webhook: ignored event", event_name=event_type)
     return {"status": "ignored", "reason": f"event '{event_type}' not handled"}
