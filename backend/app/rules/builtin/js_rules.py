@@ -345,6 +345,122 @@ class PrototypePollutionRule(Rule):
         return findings
 
 
+class NonNullAssertionRule(Rule):
+    """TS002 — Overuse of the non-null assertion operator `!` bypasses TypeScript's type safety."""
+
+    id = "TS002"
+    name = "Non-null assertion operator overuse"
+    severity = Severity.MEDIUM
+    category = Category.QUALITY
+    languages = [Language.TYPESCRIPT]
+
+    # Match trailing `!` that is used as a non-null assertion (not `!=` or `!==`)
+    _NON_NULL = re.compile(r"\w+!\s*(?:[.\[;,)\s]|$)")
+    # False positive guard: allow `!` in boolean conditions / template literals
+    _BOOLEAN_OP = re.compile(r"(?:if|while|&&|\|\|)\s*\(?\s*!\w")
+
+    def check(
+        self,
+        code: str,
+        language: Language,
+        tree: object = None,
+        structure: object = None,
+    ) -> list[Finding]:
+        findings: list[Finding] = []
+        assertion_count = 0
+        assertion_lines: list[int] = []
+
+        for i, line in enumerate(code.splitlines(), 1):
+            stripped = line.strip()
+            if stripped.startswith("//") or stripped.startswith("*"):
+                continue
+            if self._NON_NULL.search(line) and not self._BOOLEAN_OP.search(line):
+                assertion_count += 1
+                assertion_lines.append(i)
+
+        # Only flag if there are multiple assertions in the same file
+        # (one or two is fine; many suggests systemic avoidance of type checking)
+        if assertion_count >= 3:
+            for line_no in assertion_lines:
+                findings.append(
+                    Finding(
+                        severity=self.severity,
+                        category=self.category,
+                        title="Non-null assertion operator (`!`) used",
+                        description=(
+                            f"Line {line_no}: The non-null assertion operator `!` tells TypeScript "
+                            "to ignore null/undefined. With {assertion_count} assertions in this file, "
+                            "this suggests the types are wrong rather than the values. "
+                            "Each `!` is a potential runtime TypeError."
+                        ),
+                        line_start=line_no,
+                        line_end=line_no,
+                        suggestion=(
+                            "Use optional chaining (`?.`) and nullish coalescing (`??`) to handle "
+                            "null/undefined safely, or fix the upstream type so it doesn't include null."
+                        ),
+                        confidence=0.72,
+                    )
+                )
+        return findings
+
+
+class AsyncWithoutAwaitRule(Rule):
+    """JS005 — async function that never uses await is misleading and adds overhead."""
+
+    id = "JS005"
+    name = "async function without await"
+    severity = Severity.LOW
+    category = Category.QUALITY
+    languages = [Language.JAVASCRIPT, Language.TYPESCRIPT]
+
+    _ASYNC_FUNC = re.compile(r"\basync\s+(?:function\s*\w*\s*\(|(?:\(|[\w]+)\s*=>)")
+    _AWAIT = re.compile(r"\bawait\b")
+
+    def check(
+        self,
+        code: str,
+        language: Language,
+        tree: object = None,
+        structure: object = None,
+    ) -> list[Finding]:
+        """Flag async functions that contain no await expression."""
+        findings: list[Finding] = []
+        lines = code.splitlines()
+
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith(("//", "*")):
+                continue
+            if not self._ASYNC_FUNC.search(line):
+                continue
+
+            # Scan forward up to 30 lines for an await
+            window_end = min(len(lines), i + 30)
+            window = "\n".join(lines[i - 1 : window_end])
+            if not self._AWAIT.search(window):
+                findings.append(
+                    Finding(
+                        severity=self.severity,
+                        category=self.category,
+                        title="`async` function with no `await`",
+                        description=(
+                            f"Line {i}: Function declared `async` but contains no `await` in the "
+                            "next 30 lines. An async function without await returns a resolved Promise "
+                            "immediately — callers that `await` it incur a microtask overhead for no reason."
+                        ),
+                        line_start=i,
+                        line_end=i,
+                        suggestion=(
+                            "Remove `async` if the function is synchronous, or add the missing `await` "
+                            "if an async operation was forgotten."
+                        ),
+                        confidence=0.65,
+                    )
+                )
+        return findings
+
+
 ALL_RULES: list[Rule] = [
     NoVarRule(),
     ConsoleLogRule(),
@@ -353,4 +469,6 @@ ALL_RULES: list[Rule] = [
     CallbackNestingRule(),
     JWTMisuseRule(),
     PrototypePollutionRule(),
+    NonNullAssertionRule(),
+    AsyncWithoutAwaitRule(),
 ]
