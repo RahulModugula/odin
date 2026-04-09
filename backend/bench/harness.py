@@ -1,7 +1,7 @@
 """Odin Benchmark Harness.
 
 Reproducible head-to-head evaluation of code review tools against:
-  - clean_corpus : 60 clean samples → measures false positive rate
+  - clean_corpus : 200+ clean samples → measures false positive rate
   - secvuleval   : 13 real CVE/CWE samples → measures recall on known vulns
 
 Usage:
@@ -23,6 +23,7 @@ import uuid
 from pathlib import Path
 
 from bench.datasets.clean_corpus import CLEAN_SAMPLES
+from bench.datasets.clean_corpus_extended import EXTENDED_CLEAN_SAMPLES
 from bench.datasets.secvuleval import load_samples as load_secvuleval
 from bench.schemas import (
     BenchmarkReport,
@@ -54,6 +55,7 @@ def _get_git_sha() -> str:
 
 
 def _load_clean_corpus() -> list[BenchSample]:
+    all_samples = CLEAN_SAMPLES + EXTENDED_CLEAN_SAMPLES
     return [
         BenchSample(
             id=s["id"],
@@ -63,7 +65,7 @@ def _load_clean_corpus() -> list[BenchSample]:
             dataset="clean_corpus",
             notes=s.get("notes", ""),
         )
-        for s in CLEAN_SAMPLES
+        for s in all_samples
     ]
 
 
@@ -148,7 +150,7 @@ def _generate_leaderboard_md(report: BenchmarkReport) -> str:
         "## Key Metric: False Positive Rate on Clean Code",
         "",
         "A tool with a high FP rate generates noise that erodes developer trust.",
-        "All 60 samples in the clean corpus are idiomatic, production-quality code with **zero real issues**.",
+        "All 200+ samples in the clean corpus are idiomatic, production-quality code with **zero real issues**.",
         "",
     ]
 
@@ -182,7 +184,7 @@ def _generate_leaderboard_md(report: BenchmarkReport) -> str:
     lines += [
         "## Methodology",
         "",
-        f"- **Clean corpus**: {len([m for m in report.metrics if m.dataset == 'clean_corpus' and m.n_clean > 0])} tool(s) × 60 clean snippets across Python/JS/TS/Go/Rust/Java",
+        f"- **Clean corpus**: {len([m for m in report.metrics if m.dataset == 'clean_corpus' and m.n_clean > 0])} tool(s) × 200+ clean snippets across Python/JS/TS/Go/Rust/Java",
         f"- **Vulnerability corpus**: {sum(m.n_vuln for m in report.metrics if m.n_vuln > 0 and m.dataset != 'clean_corpus')} manually-verified CVE/CWE samples",
         "- **Reproducible**: pin dataset version, run `python -m bench.harness`, compare JSON in `bench/reports/`",
         "- **Honest**: we include samples where Odin loses",
