@@ -32,8 +32,11 @@ from bench.schemas import (
 )
 from bench.scorer import run_tool_on_dataset
 from bench.tools.codeql import CodeQLRunner
+from bench.tools.coderabbit import CodeRabbitRunner
 from bench.tools.common import BenchSample, ToolRunner
+from bench.tools.copilot_review import CopilotReviewRunner
 from bench.tools.odin import OdinRulesRunner
+from bench.tools.qodo import QodoRunner
 from bench.tools.semgrep import SemgrepRunner
 
 REPORTS_DIR = Path(__file__).parent / "reports"
@@ -70,7 +73,14 @@ def _load_clean_corpus() -> list[BenchSample]:
 
 
 def _build_runners(filter_tool: str | None) -> list[ToolRunner]:
-    candidates: list[ToolRunner] = [OdinRulesRunner(), SemgrepRunner(), CodeQLRunner()]
+    candidates: list[ToolRunner] = [
+        OdinRulesRunner(),
+        SemgrepRunner(),
+        CodeQLRunner(),
+        CodeRabbitRunner(),
+        CopilotReviewRunner(),
+        QodoRunner(),
+    ]
     available = [r for r in candidates if r.is_available()]
     if filter_tool:
         available = [r for r in available if r.name == filter_tool]
