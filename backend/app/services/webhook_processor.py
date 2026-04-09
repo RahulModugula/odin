@@ -1,6 +1,7 @@
 """Orchestrates GitHub PR webhook processing: fetch changed files, review each, post results."""
 
 import asyncio
+import hashlib
 import re
 from pathlib import Path
 from typing import Any
@@ -323,10 +324,16 @@ def _build_inline_comments(
         elif finding.suggestion:
             body_parts.extend(["", f"> 💡 **Suggestion:** {finding.suggestion}"])
 
+        # Embed a fingerprint for feedback tracking / deduplication
+        fingerprint = hashlib.sha256(
+            f"{finding.category}:{finding.title[:50]}:{filename}".encode()
+        ).hexdigest()[:16]
+
         body_parts.extend(
             [
                 "",
                 f"*Confidence: {finding.confidence:.0%} · [Odin](https://github.com/RahulModugula/odin)*",
+                f"\n<!-- odin:fingerprint:{fingerprint} -->",
             ]
         )
 
