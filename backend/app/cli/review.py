@@ -283,6 +283,75 @@ def print_findings(findings: list[dict]) -> int:  # type: ignore[type-arg]
 
 
 # --------------------------------------------------------------------------- #
+# SARIF 2.1.0 output                                                          #
+# --------------------------------------------------------------------------- #
+
+
+def _to_sarif(all_findings: list[dict], files: list[Path]) -> dict:
+    """Convert findings to SARIF 2.1.0 format."""
+    rules = {}
+    results = []
+
+    for f in all_findings:
+        rule_id = f.get("title", "unknown").replace(" ", "-").lower()[:50]
+        if rule_id not in rules:
+            rules[rule_id] = {
+                "id": rule_id,
+                "shortDescription": {"text": f.get("title", "")},
+                "fullDescription": {"text": f.get("description", "")},
+                "defaultConfiguration": {
+                    "level": {"critical": "error", "high": "error", "medium": "warning", "low": "note", "info": "note"}.get(f.get("severity", "info"), "note")
+                },
+            }
+
+        result = {
+            "ruleId": rule_id,
+            "level": {"critical": "error", "high": "error", "medium": "warning", "low": "note", "info": "note"}.get(f.get("severity", "info"), "note"),
+            "message": {"text": f.get("description", f.get("title", ""))},
+        }
+
+        if f.get("line_start"):
+            result["locations"] = [{
+                "physicalLocation": {
+                    "artifactLocation": {"uri": f.get("file", "unknown")},
+                    "region": {"startLine": f["line_start"]},
+                }
+            }]
+            if f.get("line_end"):
+                result["locations"][0]["physicalLocation"]["region"]["endLine"] = f["line_end"]
+
+        if f.get("fix_code"):
+            result["fixes"] = [{
+                "description": {"text": f.get("suggestion", "Apply fix")},
+                "artifactChanges": [{
+                    "artifactLocation": {"uri": f.get("file", "unknown")},
+                    "replacements": [{
+                        "deletedRegion": {"startLine": f.get("line_start", 1)},
+                        "insertedContent": {"text": f["fix_code"]},
+                    }],
+                }],
+            }]
+
+        results.append(result)
+
+    return {
+        "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+        "version": "2.1.0",
+        "runs": [{
+            "tool": {
+                "driver": {
+                    "name": "odin",
+                    "version": "0.1.0",
+                    "informationUri": "https://github.com/RahulModugula/odin",
+                    "rules": list(rules.values()),
+                }
+            },
+            "results": results,
+        }],
+    }
+
+
+# --------------------------------------------------------------------------- #
 # Argument parser                                                              #
 # --------------------------------------------------------------------------- #
 
@@ -365,6 +434,11 @@ Examples:
         help="Output findings as JSON for CI/automation",
     )
     review.add_argument(
+        "--sarif",
+        action="store_true",
+        help="Output findings as SARIF 2.1.0 (for GitHub Security tab)",
+    )
+    review.add_argument(
         "--quiet",
         "-q",
         action="store_true",
@@ -426,6 +500,9 @@ def _run_review(args: argparse.Namespace) -> None:
         else:
             findings = run_full_review(code, lang, str(filepath))
 
+        for f in findings:
+            f["file"] = str(filepath)
+
         findings = [
             f for f in findings if SEVERITY_ORDER.index(f.get("severity", "info")) <= min_idx
         ]
@@ -442,6 +519,12 @@ def _run_review(args: argparse.Namespace) -> None:
                 print(bold(str(filepath)))
                 print_findings(findings)
             all_findings.extend(findings)
+
+    # ---- SARIF output (early return) ----
+    if args.sarif:
+        sarif = _to_sarif(all_findings, files)
+        print(json.dumps(sarif, indent=2))
+        return
 
     # ---- summary ----
     if all_findings:
