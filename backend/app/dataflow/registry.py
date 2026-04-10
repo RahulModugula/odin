@@ -160,6 +160,139 @@ _TS_SINKS: list[SinkSpec] = [
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Go sources and sinks
+# ─────────────────────────────────────────────────────────────────────────────
+
+_GO_SOURCES: list[SourceSpec] = [
+    # net/http — standard library
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.GO, attr_pattern="r.URL.Query()"),
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.GO, call_pattern="r.FormValue("),
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.GO, call_pattern="r.PostFormValue("),
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.GO, attr_pattern="r.URL.Path"),
+    SourceSpec(kind=SourceKind.HTTP_BODY, language=Language.GO, call_pattern="io.ReadAll(r.Body"),
+    SourceSpec(kind=SourceKind.HTTP_BODY, language=Language.GO, call_pattern="ioutil.ReadAll(r.Body"),
+    SourceSpec(kind=SourceKind.HTTP_BODY, language=Language.GO, call_pattern="json.NewDecoder(r.Body"),
+    # gin / echo / fiber
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.GO, call_pattern="c.Query("),
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.GO, call_pattern="c.Param("),
+    SourceSpec(kind=SourceKind.HTTP_BODY, language=Language.GO, call_pattern="c.ShouldBindJSON("),
+    SourceSpec(kind=SourceKind.HTTP_BODY, language=Language.GO, call_pattern="c.BindJSON("),
+    # Env / argv
+    SourceSpec(kind=SourceKind.ENV_VAR, language=Language.GO, call_pattern="os.Getenv("),
+    SourceSpec(kind=SourceKind.ARGV, language=Language.GO, attr_pattern="os.Args"),
+    # File reads
+    SourceSpec(kind=SourceKind.FILE_READ, language=Language.GO, call_pattern="os.Open("),
+    SourceSpec(kind=SourceKind.FILE_READ, language=Language.GO, call_pattern="os.ReadFile("),
+    SourceSpec(kind=SourceKind.FILE_READ, language=Language.GO, call_pattern="ioutil.ReadFile("),
+]
+
+_GO_SINKS: list[SinkSpec] = [
+    # SQL — database/sql
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.GO, call_pattern="db.Query(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.GO, call_pattern="db.QueryRow(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.GO, call_pattern="db.Exec(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.GO, call_pattern=".Query(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.GO, call_pattern=".Exec(", tainted_arg_positions=(0,)),
+    # Shell execution
+    SinkSpec(kind=SinkKind.SHELL_EXEC, language=Language.GO, call_pattern="exec.Command(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SHELL_EXEC, language=Language.GO, call_pattern="syscall.Exec(", tainted_arg_positions=(0,)),
+    # Path traversal
+    SinkSpec(kind=SinkKind.PATH_TRAVERSAL, language=Language.GO, call_pattern="os.Open(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.PATH_TRAVERSAL, language=Language.GO, call_pattern="os.Create(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.PATH_TRAVERSAL, language=Language.GO, call_pattern="filepath.Join(", tainted_arg_positions=(0,)),
+    # SSRF
+    SinkSpec(kind=SinkKind.SSRF_FETCH, language=Language.GO, call_pattern="http.Get(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SSRF_FETCH, language=Language.GO, call_pattern="http.Post(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SSRF_FETCH, language=Language.GO, call_pattern="client.Get(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SSRF_FETCH, language=Language.GO, call_pattern="client.Do(", tainted_arg_positions=(0,)),
+    # Template injection
+    SinkSpec(kind=SinkKind.TEMPLATE_RENDER, language=Language.GO, call_pattern="fmt.Sprintf(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.TEMPLATE_RENDER, language=Language.GO, call_pattern="template.HTML(", tainted_arg_positions=(0,)),
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Rust sources and sinks
+# ─────────────────────────────────────────────────────────────────────────────
+
+_RUST_SOURCES: list[SourceSpec] = [
+    # actix-web
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.RUST, attr_pattern="web::Query"),
+    SourceSpec(kind=SourceKind.HTTP_BODY, language=Language.RUST, attr_pattern="web::Json"),
+    SourceSpec(kind=SourceKind.HTTP_BODY, language=Language.RUST, attr_pattern="web::Form"),
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.RUST, call_pattern="req.match_info().get("),
+    # axum
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.RUST, attr_pattern="extract::Path"),
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.RUST, attr_pattern="extract::Query"),
+    SourceSpec(kind=SourceKind.HTTP_BODY, language=Language.RUST, attr_pattern="extract::Json"),
+    # Env / argv
+    SourceSpec(kind=SourceKind.ENV_VAR, language=Language.RUST, call_pattern="env::var("),
+    SourceSpec(kind=SourceKind.ENV_VAR, language=Language.RUST, call_pattern="std::env::var("),
+    SourceSpec(kind=SourceKind.ARGV, language=Language.RUST, call_pattern="env::args("),
+    # Deserialization
+    SourceSpec(kind=SourceKind.DESERIALIZED, language=Language.RUST, call_pattern="serde_json::from_str("),
+    SourceSpec(kind=SourceKind.DESERIALIZED, language=Language.RUST, call_pattern="serde_json::from_reader("),
+]
+
+_RUST_SINKS: list[SinkSpec] = [
+    # SQL — sqlx / diesel
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.RUST, call_pattern="query!(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.RUST, call_pattern="query_as!(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.RUST, call_pattern="execute(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.RUST, call_pattern="sqlx::query(", tainted_arg_positions=(0,)),
+    # Shell execution
+    SinkSpec(kind=SinkKind.SHELL_EXEC, language=Language.RUST, call_pattern="Command::new(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SHELL_EXEC, language=Language.RUST, call_pattern=".arg(", tainted_arg_positions=(0,)),
+    # Path traversal
+    SinkSpec(kind=SinkKind.PATH_TRAVERSAL, language=Language.RUST, call_pattern="File::open(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.PATH_TRAVERSAL, language=Language.RUST, call_pattern="fs::read(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.PATH_TRAVERSAL, language=Language.RUST, call_pattern="PathBuf::from(", tainted_arg_positions=(0,)),
+    # SSRF
+    SinkSpec(kind=SinkKind.SSRF_FETCH, language=Language.RUST, call_pattern="reqwest::get(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SSRF_FETCH, language=Language.RUST, call_pattern="client.get(", tainted_arg_positions=(0,)),
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Java sources and sinks
+# ─────────────────────────────────────────────────────────────────────────────
+
+_JAVA_SOURCES: list[SourceSpec] = [
+    # Servlet / Spring
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.JAVA, call_pattern="request.getParameter("),
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.JAVA, call_pattern="request.getParameterValues("),
+    SourceSpec(kind=SourceKind.HTTP_BODY, language=Language.JAVA, call_pattern="request.getInputStream("),
+    SourceSpec(kind=SourceKind.HTTP_BODY, language=Language.JAVA, call_pattern="request.getReader("),
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.JAVA, call_pattern="request.getAttribute("),
+    # Spring MVC @RequestParam / @PathVariable (annotation heuristic)
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.JAVA, attr_pattern="@RequestParam"),
+    SourceSpec(kind=SourceKind.HTTP_PARAM, language=Language.JAVA, attr_pattern="@PathVariable"),
+    SourceSpec(kind=SourceKind.HTTP_BODY, language=Language.JAVA, attr_pattern="@RequestBody"),
+    # Env
+    SourceSpec(kind=SourceKind.ENV_VAR, language=Language.JAVA, call_pattern="System.getenv("),
+    SourceSpec(kind=SourceKind.ENV_VAR, language=Language.JAVA, call_pattern="System.getProperty("),
+]
+
+_JAVA_SINKS: list[SinkSpec] = [
+    # SQL — JDBC
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.JAVA, call_pattern=".executeQuery(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.JAVA, call_pattern=".executeUpdate(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.JAVA, call_pattern=".execute(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SQL_QUERY, language=Language.JAVA, call_pattern="createQuery(", tainted_arg_positions=(0,)),
+    # Shell execution
+    SinkSpec(kind=SinkKind.SHELL_EXEC, language=Language.JAVA, call_pattern="Runtime.exec(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SHELL_EXEC, language=Language.JAVA, call_pattern="ProcessBuilder(", tainted_arg_positions=(0,)),
+    # Path traversal
+    SinkSpec(kind=SinkKind.PATH_TRAVERSAL, language=Language.JAVA, call_pattern="new File(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.PATH_TRAVERSAL, language=Language.JAVA, call_pattern="Paths.get(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.PATH_TRAVERSAL, language=Language.JAVA, call_pattern="Files.readAllBytes(", tainted_arg_positions=(0,)),
+    # SSRF
+    SinkSpec(kind=SinkKind.SSRF_FETCH, language=Language.JAVA, call_pattern="new URL(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.SSRF_FETCH, language=Language.JAVA, call_pattern="HttpURLConnection", tainted_arg_positions=(0,)),
+    # Deserialization
+    SinkSpec(kind=SinkKind.DESERIALIZED, language=Language.JAVA, call_pattern=".readObject(", tainted_arg_positions=(0,)),
+    SinkSpec(kind=SinkKind.DESERIALIZED, language=Language.JAVA, call_pattern="ObjectInputStream(", tainted_arg_positions=(0,)),
+]
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Registry classes
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -169,6 +302,8 @@ class SourceRegistry:
         for s in _PYTHON_SOURCES:
             self._sources.setdefault(s.language, []).append(s)
         for s in _JS_SOURCES + _TS_SOURCES:
+            self._sources.setdefault(s.language, []).append(s)
+        for s in _GO_SOURCES + _RUST_SOURCES + _JAVA_SOURCES:
             self._sources.setdefault(s.language, []).append(s)
 
     def get(self, language: Language) -> list[SourceSpec]:
@@ -189,6 +324,8 @@ class SinkRegistry:
         for s in _PYTHON_SINKS:
             self._sinks.setdefault(s.language, []).append(s)
         for s in _JS_SINKS + _TS_SINKS:
+            self._sinks.setdefault(s.language, []).append(s)
+        for s in _GO_SINKS + _RUST_SINKS + _JAVA_SINKS:
             self._sinks.setdefault(s.language, []).append(s)
 
     def get(self, language: Language) -> list[SinkSpec]:
@@ -229,6 +366,38 @@ class SanitizerRegistry:
                 "String(",
                 "Boolean(",
                 "JSON.stringify(",
+            ],
+            Language.GO: [
+                "html.EscapeString(",
+                "url.QueryEscape(",
+                "url.PathEscape(",
+                "filepath.Clean(",
+                "filepath.Base(",
+                "strconv.Atoi(",
+                "strconv.ParseInt(",
+                "strconv.ParseFloat(",
+                "regexp.MustCompile(",
+                "strings.ReplaceAll(",
+            ],
+            Language.RUST: [
+                "html_escape::encode_text(",
+                "percent_encoding::utf8_percent_encode(",
+                "sanitize_html(",
+                ".parse::<i32>()",
+                ".parse::<u64>()",
+                ".parse::<f64>()",
+                "Uuid::parse_str(",
+            ],
+            Language.JAVA: [
+                "ESAPI.encoder().encodeForHTML(",
+                "ESAPI.encoder().encodeForSQL(",
+                "HtmlUtils.htmlEscape(",
+                "StringEscapeUtils.escapeHtml4(",
+                "StringEscapeUtils.escapeSql(",
+                "Integer.parseInt(",
+                "Long.parseLong(",
+                "UUID.fromString(",
+                "Jsoup.clean(",
             ],
         }
 
