@@ -261,9 +261,7 @@ def run_full_review(code: str, language_str: str, filename: str) -> list[dict]: 
 def print_findings(findings: list[dict]) -> int:  # type: ignore[type-arg]
     """Print formatted findings. Returns count of critical+high."""
     blockers = 0
-    for f in sorted(
-        findings, key=lambda x: SEVERITY_ORDER.index(x.get("severity", "info"))
-    ):
+    for f in sorted(findings, key=lambda x: SEVERITY_ORDER.index(x.get("severity", "info"))):
         sev = f.get("severity", "info")
         icon = SEVERITY_ICON.get(sev, "•")
         col_fn = SEVERITY_COLOR.get(sev, lambda t: t)
@@ -331,9 +329,7 @@ Examples:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     review.add_argument("paths", nargs="*", help="Files or directories to review")
-    review.add_argument(
-        "--staged", action="store_true", help="Review only git staged files"
-    )
+    review.add_argument("--staged", action="store_true", help="Review only git staged files")
     review.add_argument(
         "--diff",
         metavar="REF",
@@ -431,14 +427,10 @@ def _run_review(args: argparse.Namespace) -> None:
             findings = run_full_review(code, lang, str(filepath))
 
         findings = [
-            f
-            for f in findings
-            if SEVERITY_ORDER.index(f.get("severity", "info")) <= min_idx
+            f for f in findings if SEVERITY_ORDER.index(f.get("severity", "info")) <= min_idx
         ]
         if args.min_confidence > 0:
-            findings = [
-                f for f in findings if f.get("confidence", 1.0) >= args.min_confidence
-            ]
+            findings = [f for f in findings if f.get("confidence", 1.0) >= args.min_confidence]
 
         if not findings:
             if not args.quiet:
@@ -473,9 +465,7 @@ def _run_review(args: argparse.Namespace) -> None:
     # ---- exit code ----
     if args.fail_on != "never":
         blockers = [
-            f
-            for f in all_findings
-            if SEVERITY_ORDER.index(f.get("severity", "info")) <= fail_idx
+            f for f in all_findings if SEVERITY_ORDER.index(f.get("severity", "info")) <= fail_idx
         ]
         if blockers:
             print(f"\n{red(f'✗ {len(blockers)} blocking finding(s) at {args.fail_on}+ severity')}")
