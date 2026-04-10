@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -26,7 +25,7 @@ def get_database_url() -> str:
     return os.environ["DATABASE_URL"]
 
 
-def find_user_by_id(cursor: object, user_id: int) -> Optional[User]:
+def find_user_by_id(cursor: object, user_id: int) -> User | None:
     """Find a user by ID using parameterized queries.
 
     Args:

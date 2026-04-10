@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 import app.graph_rag._store_ref as _store_ref
+import app.services._feedback_ref as _feedback_ref
 from app.api.routes import router
 from app.api.webhook import webhook_router
 from app.config import settings
@@ -41,6 +42,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await redis.ping()
         app.state.redis = redis
         logger.info("redis connected", url=settings.redis_url)
+
+        # Wire FeedbackService into the module-level ref so LangGraph nodes
+        # can access it without FastAPI DI (mirrors _store_ref pattern)
+        from app.services.feedback import FeedbackService
+        _feedback_ref.service = FeedbackService(redis)
     except Exception as exc:
         app.state.redis = None
         logger.warning("redis unavailable — cache disabled", error=str(exc))
