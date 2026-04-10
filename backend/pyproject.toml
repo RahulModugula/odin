@@ -70,6 +70,8 @@ exclude = ["tests/fixtures/*"]
 "app/agents/graph.py" = ["E501"]
 "bench/datasets/*.py" = ["E501"]
 "bench/harness.py" = ["E501"]
+"eval/runner.py" = ["E501", "F401", "F541"]
+"eval/samples/*" = ["E", "F", "I", "SIM", "UP"]
 
 [tool.mypy]
 python_version = "3.12"

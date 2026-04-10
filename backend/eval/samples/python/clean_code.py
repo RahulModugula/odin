@@ -1,7 +1,6 @@
 """User management module with clean, well-documented code."""
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -13,7 +12,7 @@ class User:
     active: bool = True
 
 
-def find_user_by_email(users: list[User], email: str) -> Optional[User]:
+def find_user_by_email(users: list[User], email: str) -> User | None:
     """Find a user by their email address.
 
     Args:

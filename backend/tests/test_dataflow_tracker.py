@@ -12,8 +12,6 @@ Each test verifies a specific propagation scenario:
 
 from __future__ import annotations
 
-import pytest
-
 from app.dataflow.registry import sanitizer_registry, sink_registry, source_registry
 from app.dataflow.schemas import SinkKind, SourceKind
 from app.dataflow.tracker import IntraProceduralTaintTracker

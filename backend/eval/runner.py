@@ -90,7 +90,6 @@ def _run_rules_sync(code: str, language: str) -> list:
 
 async def _run_full(code: str, language: str) -> tuple[list, int]:
     from app.agents.graph import review_graph
-    from app.models.enums import Language
 
     state = {
         "code":          code,
@@ -215,7 +214,7 @@ def _print_table(results: list[dict]) -> None:
 
 
 async def main_async(args: argparse.Namespace) -> None:
-    print(f"\n🔍 Odin Eval Suite")
+    print("\n🔍 Odin Eval Suite")
     print(f"   Mode:     {'rules-only (instant)' if args.rules_only else 'full (AI + rules)'}")
     if args.lang:
         print(f"   Language: {args.lang}")

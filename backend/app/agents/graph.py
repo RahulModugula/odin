@@ -255,6 +255,18 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
         if not candidates:
             return {"findings": [], "agent_outputs": []}
 
+        # Phase B: suppress known-FP source→sink pairs before spending LLM tokens
+        try:
+            import app.services._feedback_ref as _fb_ref
+            feedback_svc = getattr(_fb_ref, "service", None)
+            if feedback_svc is not None:
+                candidates = await feedback_svc.filter_taint_candidates(candidates)
+        except Exception:
+            pass
+
+        if not candidates:
+            return {"findings": [], "agent_outputs": []}
+
         llm = get_llm()
         verdicts = await triage_all(candidates, llm)
 
