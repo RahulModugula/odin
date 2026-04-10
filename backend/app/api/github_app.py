@@ -18,7 +18,7 @@ import hashlib
 import hmac
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -108,12 +108,8 @@ async def landing_page() -> HTMLResponse:
     """Self-hoster landing page with a one-click GitHub App install button."""
     app_configured = bool(settings.github_app_id and settings.github_app_client_id)
     if app_configured:
-        install_url = (
-            f"https://github.com/apps/{settings.github_app_client_id}/installations/new"
-        )
-        button_html = (
-            f'<a href="{install_url}" class="btn">Install Odin on GitHub</a>'
-        )
+        install_url = f"https://github.com/apps/{settings.github_app_client_id}/installations/new"
+        button_html = f'<a href="{install_url}" class="btn">Install Odin on GitHub</a>'
     else:
         button_html = (
             '<p class="warn">GitHub App is not yet configured on this instance. '
@@ -158,9 +154,7 @@ async def landing_page() -> HTMLResponse:
 async def github_app_install() -> RedirectResponse:
     """Redirect the user to the GitHub App installation page."""
     _require_app_configured()
-    install_url = (
-        f"https://github.com/apps/{settings.github_app_client_id}/installations/new"
-    )
+    install_url = f"https://github.com/apps/{settings.github_app_client_id}/installations/new"
     logger.info("redirecting to github app install", url=install_url)
     return RedirectResponse(url=install_url, status_code=302)
 
@@ -218,7 +212,7 @@ async def github_app_callback(
         "account_type": account_type,
         "repos": repos,
         "setup_action": setup_action or "install",
-        "installed_at": datetime.now(timezone.utc).isoformat(),
+        "installed_at": datetime.now(UTC).isoformat(),
     }
     _installations[installation_id] = record
 
@@ -290,9 +284,11 @@ async def _handle_installation_event(payload: dict[str, Any]) -> None:
             "account_type": account_type,
             "repos": repos,
             "setup_action": "install",
-            "installed_at": datetime.now(timezone.utc).isoformat(),
+            "installed_at": datetime.now(UTC).isoformat(),
         }
-        logger.info("app installation created", installation_id=installation_id, account=account_login)
+        logger.info(
+            "app installation created", installation_id=installation_id, account=account_login
+        )
 
     elif action in {"deleted", "suspend"}:
         _installations.pop(installation_id, None)

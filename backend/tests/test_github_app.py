@@ -5,13 +5,11 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
-import pytest
 from fastapi.testclient import TestClient
 
-from app.api.github_app import _installations, _make_jwt
-
+from app.api.github_app import _installations
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -186,14 +184,16 @@ def test_app_webhook_rejects_bad_signature(client: TestClient) -> None:
 def test_app_webhook_accepts_valid_installation_event(client: TestClient) -> None:
     """App webhook accepts a correctly signed installation event."""
     _installations.clear()
-    payload = json.dumps({
-        "action": "created",
-        "installation": {
-            "id": 77,
-            "account": {"login": "testorg", "type": "Organization"},
-        },
-        "repositories": [],
-    }).encode()
+    payload = json.dumps(
+        {
+            "action": "created",
+            "installation": {
+                "id": 77,
+                "account": {"login": "testorg", "type": "Organization"},
+            },
+            "repositories": [],
+        }
+    ).encode()
     sig = _app_sig(payload)
 
     with _patch_app_configured():
