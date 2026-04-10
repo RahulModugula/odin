@@ -39,6 +39,7 @@ MAX_CANDIDATES = 20
 @dataclass
 class _TaintedVar:
     """A variable name and its provenance chain."""
+
     name: str
     source: SourceSpec
     hops: list[TaintHop] = field(default_factory=list)
@@ -77,14 +78,10 @@ class IntraProceduralTaintTracker:
             function_context: Optional function name for candidate metadata.
         """
         lines = code.splitlines()
-        tainted: dict[str, _TaintedVar] = {}   # var_name → TaintedVar
+        tainted: dict[str, _TaintedVar] = {}  # var_name → TaintedVar
         candidates: list[TaintCandidate] = []
 
-        assign_pattern = (
-            self._assign_py
-            if self._lang == Language.PYTHON
-            else self._assign_js
-        )
+        assign_pattern = self._assign_py if self._lang == Language.PYTHON else self._assign_js
 
         for lineno, raw_line in enumerate(lines, 1):
             line = raw_line.strip()
@@ -156,17 +153,19 @@ class IntraProceduralTaintTracker:
 
                     snippet = self._build_snippet(lines, lineno, tvar.hops)
 
-                    candidates.append(TaintCandidate(
-                        candidate_id=candidate_id,
-                        language=self._lang,
-                        function_name=function_context,
-                        source=tvar.source,
-                        source_location=(tvar.hops[0].line if tvar.hops else lineno, 0),
-                        sink=sink_spec,
-                        sink_location=(lineno, raw_line.find(sink_spec.call_pattern)),
-                        hops=list(tvar.hops),
-                        snippet=snippet,
-                    ))
+                    candidates.append(
+                        TaintCandidate(
+                            candidate_id=candidate_id,
+                            language=self._lang,
+                            function_name=function_context,
+                            source=tvar.source,
+                            source_location=(tvar.hops[0].line if tvar.hops else lineno, 0),
+                            sink=sink_spec,
+                            sink_location=(lineno, raw_line.find(sink_spec.call_pattern)),
+                            hops=list(tvar.hops),
+                            snippet=snippet,
+                        )
+                    )
 
                     if len(candidates) >= MAX_CANDIDATES:
                         return candidates
@@ -198,7 +197,9 @@ class IntraProceduralTaintTracker:
         # f-string or template literal
         if self._lang == Language.PYTHON and self._fstring_py.search(full_line):
             return var_name in full_line
-        if self._lang in (Language.JAVASCRIPT, Language.TYPESCRIPT) and self._template_js.search(full_line):
+        if self._lang in (Language.JAVASCRIPT, Language.TYPESCRIPT) and self._template_js.search(
+            full_line
+        ):
             return var_name in full_line
         return False
 

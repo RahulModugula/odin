@@ -26,6 +26,7 @@ def _tracker(lang: Language) -> IntraProceduralTaintTracker:
 # Python: source seeding
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_python_source_http_param_seeded() -> None:
     code = """
 username = request.args.get('username')
@@ -68,6 +69,7 @@ subprocess.run(cmd, shell=True)
 # Python: assignment-chain propagation
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_python_assignment_chain_propagates() -> None:
     code = """
 raw = request.args.get('q')
@@ -92,6 +94,7 @@ cursor.execute(sql)
 # Python: SSRF
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_python_ssrf_detected() -> None:
     code = """
 url = request.args.get('url')
@@ -114,6 +117,7 @@ resp = client.get(target)
 # Python: path traversal
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_python_path_traversal_via_open() -> None:
     code = """
 filename = request.args.get('file')
@@ -127,6 +131,7 @@ with open(filename) as f:
 # ─────────────────────────────────────────────────────────────────────────────
 # Python: clean code produces no candidates
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_python_parameterized_sql_no_candidate() -> None:
     """Parameterized queries should NOT be flagged."""
@@ -172,6 +177,7 @@ cursor.execute("SELECT * FROM t WHERE id = ?", (result,))
 # Python: deserialization
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def test_python_pickle_loads_candidate() -> None:
     code = """
 data = request.form.get('session')
@@ -185,6 +191,7 @@ obj = pickle.loads(decoded)
 # ─────────────────────────────────────────────────────────────────────────────
 # JavaScript: XSS
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_js_xss_via_innerhtml() -> None:
     code = """
@@ -207,6 +214,7 @@ const result = eval(expr);
 # ─────────────────────────────────────────────────────────────────────────────
 # JavaScript: clean code
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_js_textcontent_is_clean() -> None:
     """textContent assignment is safe and should produce no DOM_WRITE candidates."""
@@ -232,6 +240,7 @@ const resp = await fetch(FIXED_URL);
 # ─────────────────────────────────────────────────────────────────────────────
 # Snippet and metadata
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def test_candidate_snippet_contains_sink_line() -> None:
     code = """

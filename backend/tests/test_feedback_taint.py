@@ -18,6 +18,7 @@ from app.services.feedback import _TAINT_PAIR_FP_THRESHOLD, FeedbackService
 
 # ── Minimal stubs so we don't need Redis running ─────────────────────────────
 
+
 class _FakeRedis:
     """Minimal in-memory Redis substitute."""
 
@@ -75,6 +76,7 @@ class _FakeCandidate:
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def redis() -> _FakeRedis:
     return _FakeRedis()
@@ -95,7 +97,9 @@ async def test_taint_pair_suppressed_after_threshold(svc: FeedbackService) -> No
     src, snk = "src-sig-aaa", "snk-sig-bbb"
 
     for i in range(_TAINT_PAIR_FP_THRESHOLD):
-        assert not await svc.is_taint_pair_suppressed(src, snk), f"should not be suppressed after {i} reports"
+        assert not await svc.is_taint_pair_suppressed(src, snk), (
+            f"should not be suppressed after {i} reports"
+        )
         await svc.record_taint_false_positive(src, snk, "python", f"cand-{i}")
 
     # After reaching threshold, the pair is suppressed
