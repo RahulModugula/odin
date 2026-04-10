@@ -7,11 +7,9 @@ from datetime import UTC, datetime
 import structlog
 from redis.asyncio import Redis
 
-logger = structlog.get_logger()
+from app.config import settings
 
-# Taint-pair suppression kicks in after this many FP reports — lower than the
-# general threshold because source→sink pairs are highly specific.
-_TAINT_PAIR_FP_THRESHOLD = 2
+logger = structlog.get_logger()
 
 
 class FeedbackService:
@@ -63,11 +61,12 @@ class FeedbackService:
         await self.redis.lpush(key, json.dumps(entry))
         await self.redis.ltrim(key, 0, 99)  # keep last 100
 
-        # If marked as false positive 3+ times, add to suppressions
+        # If marked as false positive N+ times, add to suppressions
         all_entries = await self.redis.lrange(key, 0, -1)
         fp_count = sum(1 for e in all_entries if json.loads(e).get("action") == "false_positive")
-        if fp_count >= 3:
-            await self.redis.set(f"{self._suppression_prefix}{fp}", "1", ex=86400 * 90)  # 90 days
+        if fp_count >= settings.feedback_general_threshold:
+            ttl = 86400 * settings.feedback_suppression_ttl_days
+            await self.redis.set(f"{self._suppression_prefix}{fp}", "1", ex=ttl)
             logger.info("added suppression", fingerprint=fp, title=title)
 
     async def record_taint_false_positive(
@@ -93,9 +92,10 @@ class FeedbackService:
         await self.redis.ltrim(key, 0, 49)
 
         all_entries = await self.redis.lrange(key, 0, -1)
-        if len(all_entries) >= _TAINT_PAIR_FP_THRESHOLD:
+        if len(all_entries) >= settings.feedback_taint_threshold:
             suppress_key = self._taint_pair_key(source_sig, sink_sig)
-            await self.redis.set(suppress_key, "1", ex=86400 * 90)  # 90 days
+            ttl = 86400 * settings.feedback_suppression_ttl_days
+            await self.redis.set(suppress_key, "1", ex=ttl)
             logger.info(
                 "taint pair suppressed",
                 source_sig=source_sig,
@@ -147,6 +147,18 @@ class FeedbackService:
             # Exclude taint-pair keys from this list
             if not fp.startswith("taint:"):
                 keys.append(fp)
+        return keys
+
+    async def get_taint_suppressions(self) -> list[str]:
+        """Return list of suppressed taint source:sink pairs."""
+        keys = []
+        async for key in self.redis.scan_iter(f"{self._taint_prefix}*"):
+            decoded = key.decode()
+            if decoded.startswith(self._taint_prefix) and not decoded.startswith(
+                f"{self._taint_prefix}fp:"
+            ):
+                pair = decoded.replace(self._taint_prefix, "")
+                keys.append(pair)
         return keys
 
     async def is_suppressed(self, category: str, title: str, language: str) -> bool:

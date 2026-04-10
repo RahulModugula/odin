@@ -410,3 +410,25 @@ async def submit_feedback(
         language=request.language,
     )
     return {"status": "recorded", "finding_id": request.finding_id, "action": request.action}
+
+
+@router.get("/feedback/stats")
+async def feedback_stats(req: Request = None) -> dict:  # type: ignore[assignment]
+    """Return FP rate and suppression stats over time per team."""
+    redis = getattr(req.app.state, "redis", None) if req else None
+    if redis is None:
+        raise HTTPException(status_code=503, detail="Redis is not available")
+
+    from app.services.feedback import FeedbackService
+
+    service = FeedbackService(redis)
+
+    suppressions = await service.get_suppressions()
+    taint_suppressions = await service.get_taint_suppressions()
+
+    return {
+        "total_suppressions": len(suppressions),
+        "total_taint_suppressions": len(taint_suppressions),
+        "suppressed_fingerprints": suppressions[:50],
+        "suppressed_taint_pairs": taint_suppressions[:50],
+    }

@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     # Minimum confidence threshold — findings below this are suppressed (0.0 = show all)
     min_confidence: float = 0.0
 
+    # Suppression thresholds (configurable via .odin.yaml)
+    feedback_general_threshold: int = 3  # FP reports before suppression
+    feedback_taint_threshold: int = 2  # taint-pair FP reports before suppression
+    feedback_suppression_ttl_days: int = 90  # days before suppression expires
+
     # Review store TTL (seconds)
     review_store_ttl: int = 2_592_000  # 30 days
 
