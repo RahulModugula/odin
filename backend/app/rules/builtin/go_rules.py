@@ -373,6 +373,65 @@ class GoHardcodedIPRule(Rule):
         return findings
 
 
+class GoUnbufferedChannelSendRule(Rule):
+    """GO008 — Sending to an unbuffered channel without a goroutine can deadlock."""
+
+    id = "GO008"
+    name = "Unbuffered channel send may deadlock"
+    severity = Severity.MEDIUM
+    category = Category.QUALITY
+    languages = [Language.GO]
+
+    # make(chan T) without a size argument
+    _UNBUFFERED_MAKE = re.compile(r"\bmake\s*\(\s*chan\s+\w[\w.*\[\]]*\s*\)")
+    # Channel send: ch <- value on same channel
+    _CHAN_SEND = re.compile(r"\b\w+\s*<-\s*\w")
+    # Inside a goroutine
+    _GOROUTINE = re.compile(r"\bgo\s+func\b|\bgo\s+\w+\s*\(")
+
+    def check(
+        self,
+        code: str,
+        language: Language,
+        tree: object = None,
+        structure: object = None,
+    ) -> list[Finding]:
+        findings: list[Finding] = []
+        lines = code.splitlines()
+        has_goroutine = bool(self._GOROUTINE.search(code))
+
+        for i, line in enumerate(lines, 1):
+            stripped = line.strip()
+            if stripped.startswith("//"):
+                continue
+            # Flag: unbuffered channel created, send happens in same scope, no goroutine
+            if self._UNBUFFERED_MAKE.search(line):
+                # Look ahead 20 lines for a send without a concurrent goroutine
+                window_end = min(len(lines), i + 20)
+                window = "\n".join(lines[i : window_end])
+                if self._CHAN_SEND.search(window) and not has_goroutine:
+                    findings.append(
+                        Finding(
+                            severity=self.severity,
+                            category=self.category,
+                            title="Unbuffered channel send without concurrent receiver",
+                            description=(
+                                f"Line {i}: `make(chan ...)` creates an unbuffered channel. "
+                                "Sending to it blocks until a receiver is ready. If no goroutine "
+                                "is launched to receive, this will deadlock."
+                            ),
+                            line_start=i,
+                            line_end=i,
+                            suggestion=(
+                                "Either use a buffered channel `make(chan T, n)`, launch a goroutine "
+                                "to receive, or use `select` with a `default` case to avoid blocking."
+                            ),
+                            confidence=0.72,
+                        )
+                    )
+        return findings
+
+
 ALL_RULES: list[Rule] = [
     GoErrorIgnoredRule(),
     GoPanicInLibraryRule(),
@@ -381,4 +440,5 @@ ALL_RULES: list[Rule] = [
     GoMutexUnlockRule(),
     GoContextFirstArgRule(),
     GoHardcodedIPRule(),
+    GoUnbufferedChannelSendRule(),
 ]
