@@ -91,8 +91,17 @@ class MagicNumberRule(Rule):
     category = Category.QUALITY
     languages = list(Language)
 
-    # Commonly acceptable literals that need no named constant
-    _ALLOWED = {0, 1, -1, 2, 10, 100, 1000}
+    # Commonly acceptable literals — powers of 2, HTTP codes, well-known ports, small values
+    _ALLOWED = {0, 1, -1, 2, 4, 8, 10, 16, 32, 64, 100, 128, 256, 512, 1000, 1024}
+    # HTTP status codes 100–599 are domain constants, not magic numbers
+    _HTTP_STATUS_RANGE = range(100, 600)
+    # Well-known port numbers
+    _KNOWN_PORTS = {
+        21, 22, 25, 53, 80, 110, 143, 443, 465, 587, 993, 995,
+        1433, 1521, 3000, 3306, 3389, 4200, 5000, 5432, 5672,
+        5900, 6379, 6380, 8000, 8080, 8443, 8888, 9000, 9200,
+        9300, 11211, 15672, 27017, 27018, 50000,
+    }
     _pattern = re.compile(r'(?<!["\'\w.])(\d{3,})\b(?!["\'])')
 
     def check(
@@ -113,10 +122,19 @@ class MagicNumberRule(Rule):
                 val = int(m.group(1))
                 if val in self._ALLOWED:
                     continue
-                context = line[max(0, m.start() - 20) : m.end() + 20].lower()
+                if val in self._HTTP_STATUS_RANGE:
+                    continue
+                if val in self._KNOWN_PORTS:
+                    continue
+                context = line[max(0, m.start() - 30) : m.end() + 30].lower()
                 if any(
                     w in context
-                    for w in ["status", "port", "timeout", "retry", "version", "code", "http"]
+                    for w in [
+                        "status", "port", "timeout", "retry", "version", "code", "http",
+                        "sleep", "delay", "max_length", "max_size", "limit", "expire",
+                        "ttl", "minutes", "seconds", "hours", "days", "years",
+                        "enum", "const", "final", "=", "ok =", "created =", "bad",
+                    ]
                 ):
                     continue
                 findings.append(

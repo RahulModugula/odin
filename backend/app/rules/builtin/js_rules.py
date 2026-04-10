@@ -58,7 +58,8 @@ class ConsoleLogRule(Rule):
     category = Category.QUALITY
     languages = [Language.JAVASCRIPT, Language.TYPESCRIPT]
 
-    _pattern = re.compile(r"\bconsole\.(log|debug|info|warn|error)\s*\(")
+    # Flag debug-only calls; console.error/warn are legitimate in error handlers
+    _pattern = re.compile(r"\bconsole\.(log|debug)\s*\(")
 
     def check(
         self,
@@ -77,11 +78,11 @@ class ConsoleLogRule(Rule):
                     Finding(
                         severity=self.severity,
                         category=self.category,
-                        title="console.log() statement found",
-                        description=f"Line {i}: Debug/logging statement left in code.",
+                        title="console.log() debug statement found",
+                        description=f"Line {i}: Debug logging statement left in code.",
                         line_start=i,
                         line_end=i,
-                        suggestion="Remove or replace with a proper logging library.",
+                        suggestion="Remove before production or replace with a structured logger.",
                         confidence=0.85,
                     )
                 )
@@ -291,15 +292,14 @@ class PrototypePollutionRule(Rule):
     category = Category.SECURITY
     languages = [Language.JAVASCRIPT, Language.TYPESCRIPT]
 
-    # Dynamic property assignment by path (e.g. obj[key] = val inside a loop)
-    _BRACKET_ASSIGN = re.compile(r"\w+\[(\w+)\]\s*=")
     # Recursive merge pattern: target[key] = source[key] inside a function
     _MERGE_PATTERN = re.compile(r"(target|dest|obj|result)\[(\w+)\]\s*=\s*(source|src|from)\[")
     # Guard: an if-statement that checks for __proto__ / constructor / prototype keys
     _PROTO_GUARD = re.compile(
         r"===\s*['\"]__proto__['\"]|===\s*['\"]constructor['\"]|"
         r"===\s*['\"]prototype['\"]|"
-        r"if\s*\([^)]*(__proto__|constructor)[^)]*\)"
+        r"if\s*\([^)]*(__proto__|constructor)[^)]*\)|"
+        r"Object\.hasOwn\(|hasOwnProperty\s*\("
     )
 
     def check(
@@ -311,7 +311,7 @@ class PrototypePollutionRule(Rule):
     ) -> list[Finding]:
         findings: list[Finding] = []
 
-        # Skip if the code already has prototype guards (conditional checks)
+        # Skip if the code already has prototype guards
         if self._PROTO_GUARD.search(code):
             return []
 
