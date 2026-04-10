@@ -26,12 +26,12 @@ class SourceKind(StrEnum):
 
 
 class SinkKind(StrEnum):
-    CODE_EXEC = "code_exec"        # eval, exec, compile
-    SHELL_EXEC = "shell_exec"      # os.system, subprocess(shell=True)
-    SQL_QUERY = "sql_query"        # cursor.execute(f"...")
-    DOM_WRITE = "dom_write"        # innerHTML, document.write
+    CODE_EXEC = "code_exec"  # eval, exec, compile
+    SHELL_EXEC = "shell_exec"  # os.system, subprocess(shell=True)
+    SQL_QUERY = "sql_query"  # cursor.execute(f"...")
+    DOM_WRITE = "dom_write"  # innerHTML, document.write
     PATH_TRAVERSAL = "path_traversal"  # open(user_input)
-    SSRF_FETCH = "ssrf_fetch"      # requests.get(user_url)
+    SSRF_FETCH = "ssrf_fetch"  # requests.get(user_url)
     TEMPLATE_RENDER = "template_render"  # render(user_template)
     DESERIALIZED = "deserialized"  # pickle.loads, yaml.load
 
@@ -41,10 +41,10 @@ class SourceSpec:
     kind: SourceKind
     language: Language
     # Pattern descriptors — at least one must be set
-    call_pattern: str | None = None   # function call e.g. "request.args.get"
-    attr_pattern: str | None = None   # attribute access e.g. "request.form"
-    module: str | None = None         # for grouping / display
-    signature: str = ""               # stable fingerprint
+    call_pattern: str | None = None  # function call e.g. "request.args.get"
+    attr_pattern: str | None = None  # attribute access e.g. "request.form"
+    module: str | None = None  # for grouping / display
+    signature: str = ""  # stable fingerprint
 
     def __post_init__(self) -> None:
         if not self.signature:
@@ -56,7 +56,7 @@ class SourceSpec:
 class SinkSpec:
     kind: SinkKind
     language: Language
-    call_pattern: str               # function/method name pattern
+    call_pattern: str  # function/method name pattern
     tainted_arg_positions: tuple[int, ...] | Literal["all"] = "all"
     kwarg_conditions: dict[str, str] = field(default_factory=dict)
     module: str | None = None
@@ -71,6 +71,7 @@ class SinkSpec:
 @dataclass
 class TaintHop:
     """One step in a taint propagation chain."""
+
     line: int
     col: int
     variable: str
@@ -81,15 +82,16 @@ class TaintHop:
 @dataclass
 class TaintCandidate:
     """A potential source→sink taint path, pre-LLM-triage."""
+
     candidate_id: str
     language: Language
     function_name: str | None
     source: SourceSpec
-    source_location: tuple[int, int]   # (line, col)
+    source_location: tuple[int, int]  # (line, col)
     sink: SinkSpec
-    sink_location: tuple[int, int]     # (line, col)
+    sink_location: tuple[int, int]  # (line, col)
     hops: list[TaintHop]
-    snippet: str                       # multi-line context for LLM
+    snippet: str  # multi-line context for LLM
 
     @classmethod
     def make_id(
@@ -106,9 +108,10 @@ class TaintCandidate:
 @dataclass
 class TriageVerdict:
     """LLM judgment on one TaintCandidate."""
+
     candidate_id: str
     exploitable: bool
-    confidence: float          # 0.0–1.0
-    exploit_scenario: str      # "an attacker can ... to achieve ..."
+    confidence: float  # 0.0–1.0
+    exploit_scenario: str  # "an attacker can ... to achieve ..."
     suggested_sanitizer: str
     reasoning: str

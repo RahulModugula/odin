@@ -46,6 +46,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # Wire FeedbackService into the module-level ref so LangGraph nodes
         # can access it without FastAPI DI (mirrors _store_ref pattern)
         from app.services.feedback import FeedbackService
+
         _feedback_ref.service = FeedbackService(redis)
     except Exception as exc:
         app.state.redis = None

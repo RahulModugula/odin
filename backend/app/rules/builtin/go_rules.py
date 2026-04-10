@@ -408,7 +408,7 @@ class GoUnbufferedChannelSendRule(Rule):
             if self._UNBUFFERED_MAKE.search(line):
                 # Look ahead 20 lines for a send without a concurrent goroutine
                 window_end = min(len(lines), i + 20)
-                window = "\n".join(lines[i : window_end])
+                window = "\n".join(lines[i:window_end])
                 if self._CHAN_SEND.search(window) and not has_goroutine:
                     findings.append(
                         Finding(

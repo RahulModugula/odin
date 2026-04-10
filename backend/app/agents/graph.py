@@ -78,7 +78,7 @@ def run_rules_node(state: ReviewState) -> dict:  # type: ignore[type-arg]
 
 def fan_out_to_agents(state: ReviewState) -> list[Send]:
     """Fan out to all four branches in parallel:
-      security/quality/docs agents + deterministic rules + dataflow triage.
+    security/quality/docs agents + deterministic rules + dataflow triage.
     """
     agent_input: dict = {
         "code": state["code"],
@@ -249,7 +249,9 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
         from app.dataflow.triage import TRIAGE_CONFIDENCE_FLOOR, triage_all
 
         lang = Language(state["language"])
-        tracker = IntraProceduralTaintTracker(source_registry, sink_registry, sanitizer_registry, lang)
+        tracker = IntraProceduralTaintTracker(
+            source_registry, sink_registry, sanitizer_registry, lang
+        )
         candidates = tracker.analyze(state["code"])
 
         if not candidates:
@@ -258,6 +260,7 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
         # Phase B: suppress known-FP source→sink pairs before spending LLM tokens
         try:
             import app.services._feedback_ref as _fb_ref
+
             feedback_svc = getattr(_fb_ref, "service", None)
             if feedback_svc is not None:
                 candidates = await feedback_svc.filter_taint_candidates(candidates)
@@ -274,24 +277,26 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
         for candidate, verdict in zip(candidates, verdicts, strict=False):
             if not verdict.exploitable or verdict.confidence < TRIAGE_CONFIDENCE_FLOOR:
                 continue
-            findings.append(Finding(
-                severity=Severity.CRITICAL if verdict.confidence >= 0.85 else Severity.HIGH,
-                category=Category.SECURITY,
-                title=f"Taint flow: {candidate.source.kind.value} → {candidate.sink.kind.value}",
-                description=(
-                    f"Dataflow analysis detected a tainted path from "
-                    f"`{candidate.source.call_pattern or candidate.source.attr_pattern}` "
-                    f"to `{candidate.sink.call_pattern}` (lines "
-                    f"{candidate.source_location[0]}→{candidate.sink_location[0]}). "
-                    f"{verdict.exploit_scenario}"
-                ),
-                line_start=candidate.sink_location[0],
-                line_end=candidate.sink_location[0],
-                suggestion=verdict.suggested_sanitizer,
-                attack_scenario=verdict.exploit_scenario,
-                confidence=verdict.confidence,
-                source="dataflow",
-            ))
+            findings.append(
+                Finding(
+                    severity=Severity.CRITICAL if verdict.confidence >= 0.85 else Severity.HIGH,
+                    category=Category.SECURITY,
+                    title=f"Taint flow: {candidate.source.kind.value} → {candidate.sink.kind.value}",
+                    description=(
+                        f"Dataflow analysis detected a tainted path from "
+                        f"`{candidate.source.call_pattern or candidate.source.attr_pattern}` "
+                        f"to `{candidate.sink.call_pattern}` (lines "
+                        f"{candidate.source_location[0]}→{candidate.sink_location[0]}). "
+                        f"{verdict.exploit_scenario}"
+                    ),
+                    line_start=candidate.sink_location[0],
+                    line_end=candidate.sink_location[0],
+                    suggestion=verdict.suggested_sanitizer,
+                    attack_scenario=verdict.exploit_scenario,
+                    confidence=verdict.confidence,
+                    source="dataflow",
+                )
+            )
 
         output = AgentOutput(agent_name="dataflow_triage", findings=findings)
         return {"findings": findings, "agent_outputs": [output]}
