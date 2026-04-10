@@ -1,5 +1,6 @@
-import os
 import json
+import os
+
 
 def load_config(path):
     with open(path) as f:

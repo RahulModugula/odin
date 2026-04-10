@@ -1,6 +1,7 @@
 """Intentionally vulnerable: insecure deserialization patterns. For eval only."""
-import pickle
 import base64
+import pickle
+
 import yaml
 from flask import Flask, request
 
