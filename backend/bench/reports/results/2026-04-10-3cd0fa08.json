@@ -1,0 +1,47 @@
+{
+  "run_id": "3cd0fa08",
+  "timestamp": "2026-04-10T16:42:38.748171",
+  "commit_sha": "0c744a7",
+  "odin_version": "dev",
+  "datasets": [
+    "clean_corpus",
+    "secvuleval"
+  ],
+  "tools": [
+    "odin-rules"
+  ],
+  "metrics": [
+    {
+      "tool": "odin-rules",
+      "dataset": "secvuleval-subset",
+      "n_samples": 14,
+      "n_vuln": 14,
+      "n_clean": 0,
+      "tp": 12,
+      "fp": 0,
+      "tn": 0,
+      "fn": 2,
+      "precision": 1.0,
+      "recall": 0.857,
+      "f1": 0.923,
+      "fp_rate": 0.0,
+      "avg_latency_ms": 0.7
+    },
+    {
+      "tool": "odin-rules",
+      "dataset": "clean_corpus",
+      "n_samples": 60,
+      "n_vuln": 0,
+      "n_clean": 60,
+      "tp": 0,
+      "fp": 0,
+      "tn": 60,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "fp_rate": 0.0,
+      "avg_latency_ms": 0.7
+    }
+  ]
+}
