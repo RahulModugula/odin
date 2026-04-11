@@ -323,6 +323,37 @@ python -m bench.harness --dataset clean_corpus
 
 ---
 
+## vs CodeRabbit
+
+The honest comparison — including where CodeRabbit wins.
+
+| | Odin | CodeRabbit Free | CodeRabbit Pro |
+|---|---|---|---|
+| **Price** | Free | Free (limited) | $24/dev/mo |
+| **Open source** | ✅ MIT | ❌ | ❌ |
+| **Self-hostable** | ✅ | ❌ | ❌ |
+| **Data privacy** | ✅ never leaves your infra | ❌ | ❌ |
+| **Local LLMs (LM Studio, Ollama)** | ✅ | ❌ | ❌ |
+| **BYOK (OpenRouter, OpenAI)** | ✅ | ❌ | ✅ |
+| **Published FP rate** | ✅ [0.0% on 60 clean samples](backend/bench/reports/leaderboard.md) | ❌ | ❌ |
+| **Reproducible benchmarks** | ✅ `python -m bench.harness` | ❌ | ❌ |
+| **Taint-guided triage (LLift/INFERROI)** | ✅ | ❌ | ❌ |
+| **Learning feedback loop** | ✅ suppresses FPs at generator level | ❌ | limited |
+| **GitHub App one-click install** | ✅ | ✅ | ✅ |
+| **GitHub webhook** | ✅ | ✅ | ✅ |
+| **CLI (`uvx odin review`)** | ✅ no Docker needed | ❌ | ❌ |
+| **PR summary & walkthrough** | ✅ | ✅ | ✅ |
+| **Inline comments** | ✅ | ✅ | ✅ |
+| **Deterministic rules** | ✅ 29 rules, 6 languages | ✅ 40+ | ✅ 40+ |
+| **MCP server** | ✅ Claude Code / Cursor | ❌ | ❌ |
+| **GitLab / Bitbucket** | ❌ (GitHub only) | ✅ | ✅ |
+
+**Where CodeRabbit wins:** more platform integrations (GitLab, Bitbucket, Azure DevOps), more rules out of the box, more mature bot UX, and a larger team maintaining it. If you're on GitLab or want something fully managed, CodeRabbit is a better fit today.
+
+**Where Odin wins:** if your code can't leave your infrastructure, if you want to understand and audit what's running, if you want FP rates that actually drop over time, or if you want to run it free with your own model — Odin is the only open-source option in this space with published, reproducible benchmarks and a research-backed triage architecture.
+
+---
+
 ## License
 
 MIT — use it, fork it, make it better.
