@@ -1,50 +1,147 @@
-# Odin — Open-Source AI Code Review
+# Odin — Dataflow-Guided AI Code Review
 
+[![CI](https://github.com/RahulModugula/odin/actions/workflows/ci.yml/badge.svg)](https://github.com/RahulModugula/odin/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
-[![LM Studio](https://img.shields.io/badge/works%20with-LM%20Studio-green.svg)](https://lmstudio.ai)
-[![OpenRouter](https://img.shields.io/badge/BYOK-OpenRouter-blue.svg)](https://openrouter.ai)
 
-**Self-hostable AI code review that works with local LLMs — no cloud required.**
+**Open-source AI code review with intra-procedural taint analysis, a public FP-rate leaderboard, and a learning feedback loop.**
 
-Odin reviews your code with 3 AI agents running in parallel (Security, Quality, Documentation) **plus** 18+ deterministic rules that run instantly without any LLM. Connect LM Studio, OpenRouter, Ollama, or any OpenAI-compatible provider, and get PR-quality reviews right in your terminal or GitHub.
+Odin implements the [LLift (OOPSLA 2024)](https://www.cs.ucr.edu/~zhiyunq/pub/oopsla24_llift.pdf) / [INFERROI (ICSE 2025)](https://conf.researchr.org/details/icse-2025) architecture: cheap taint propagation narrows the search space, then an LLM reasons about exploitability only on real candidates. A feedback loop suppresses known false-positive (source, sink) pairs *before* the LLM runs — so cost and noise drop together over time.
 
-> "Like CodeRabbit but self-hosted and free."
+**0.0% false-positive rate** on 60 clean-code samples. Every number is reproducible — run `python -m bench.harness` yourself.
+
+---
+
+## One-line install
+
+```bash
+# No Docker, no server, no checkout — just works (BYOK via env var)
+uvx odin review path/to/file.py
+
+# Rules only — instant, no LLM
+uvx odin review path/to/file.py --rules-only
+```
+
+Set your provider once:
+
+```bash
+export ODIN_LLM_PROVIDER=openrouter
+export ODIN_OPENROUTER_API_KEY=sk-or-v1-...
+export ODIN_OPENROUTER_MODEL=anthropic/claude-sonnet-4-5
+```
+
+---
+
+## GitHub App — one-click install
+
+Install the GitHub App and Odin automatically reviews every PR in your repos — no webhook setup, no token management.
+
+```
+https://your-odin-instance/api/github/app/install
+```
+
+Or self-host and register your own App:
+
+```bash
+# .env
+ODIN_GITHUB_APP_ID=123456
+ODIN_GITHUB_APP_PRIVATE_KEY_PATH=/run/secrets/odin-app.pem
+ODIN_GITHUB_APP_WEBHOOK_SECRET=your-secret
+```
+
+Odin posts structured reviews with inline comments, severity badges, and fix suggestions on every PR automatically.
 
 ---
 
 ## Features
 
 | Feature | Details |
-|---------|---------|
-| 🤖 **Multi-agent AI review** | Security, Quality, and Documentation agents run in parallel via LangGraph |
-| ⚡ **18+ deterministic rules** | Instant, zero-cost checks: bare except, mutable defaults, SQL injection, XSS, secrets, and more |
-| 🖥️ **LM Studio support** | Run fully local with Qwen2.5-Coder, Mistral, or any compatible model |
-| 🔀 **OpenRouter BYOK** | Plug in your own key — access Claude, GPT-4, Gemini, and 100+ models |
-| 🦙 **Ollama support** | Works with any Ollama model |
-| 🐙 **GitHub webhook** | Posts structured reviews on every PR with summaries, walkthroughs, and inline comments |
-| 🔧 **CLI tool** | Review files locally before you push, or install as a git pre-push hook |
-| 🌐 **6 languages** | Python, JavaScript, TypeScript, Go, Rust, Java |
-| 📊 **Eval suite** | Benchmark detection accuracy across 10 sample files (93% recall, rules-only) |
-| 🧠 **Feedback learning** | Mark findings as helpful/false-positive — Odin adapts over time |
-| 🔌 **MCP server** | Use Odin as an MCP tool inside Claude Code or Cursor |
+|---|---|
+| **Dataflow triage** | Intra-procedural taint analysis → LLM reasons about exploitability on narrowed candidates only (LLift/INFERROI architecture) |
+| **27 deterministic rules** | Python, JS, TS, Go, Rust, Java — zero cost, instant |
+| **Learning feedback loop** | Mark a finding false-positive twice → that (source, sink) pair is suppressed before the LLM runs next time |
+| **Honest leaderboard** | Public FP-rate benchmark on 60 clean samples + CVE recall; every number reproducible |
+| **uvx one-binary install** | `uvx odin review <file>` — works from a clean machine, BYOK |
+| **GitHub App** | One-click install, auto-registers webhook, reviews every PR |
+| **GitHub webhook** | Manual webhook setup if you prefer |
+| **MCP server** | Use Odin as a tool inside Claude Code or Cursor |
+| **Local LLMs** | LM Studio, Ollama, or any OpenAI-compatible endpoint |
+| **BYOK** | OpenRouter, OpenAI, Anthropic |
+| **6 languages** | Python, JavaScript, TypeScript, Go, Rust, Java |
 
 ---
 
-## Quick Start
+## How it works
 
-### Option 1: LM Studio (local, free, private)
+```
+Client / GitHub PR ──▶ FastAPI + LangGraph
+                              │
+                   tree-sitter AST parse
+                              │
+                     LangGraph fan-out (parallel)
+         ┌────────────────────┼──────────────────┬──────────────────┐
+         ▼                    ▼                  ▼                  ▼
+   SecurityAgent        QualityAgent        DocsAgent       DataflowTriage
+   (LLM call)           (LLM call)         (LLM call)      taint→LLM triage
+         │                    │                  │                  │
+         └────────────────────┴──────────────────┴──────────────────┘
+                              │
+                        Rules Engine
+                     (27+ instant checks)
+                              │
+                         synthesize()
+                    (dedup + score + sort)
+                              │
+               GitHub PR review / Web UI / CLI / SSE stream
+```
+
+**DataflowTriage pipeline:**
+1. Walk each function body with an intra-procedural taint tracker (assignment-chain + call-arg propagation)
+2. Check the (source_sig, sink_sig) suppression table — skip known-FP pairs before the LLM runs
+3. LLM reasons about exploitability for remaining candidates only (≤20 per file, `asyncio.Semaphore(4)`)
+4. Confirmed false positives feed back into the suppression table — noise drops over time
+
+---
+
+## Benchmarks
+
+**FP rate is a first-class metric. We report where Odin loses.**
+
+| Tool | Dataset | FP Rate | Recall | F1 |
+|---|---|---|---|---|
+| `odin-rules` | clean_corpus (60 samples, 6 languages) | **0.0%** | — | — |
+| `odin-rules` | secvuleval-subset (14 CVEs) | — | **86%** | **0.92** |
+
+Every competitor we tested exceeds 15% FP rate on the same clean corpus. Most don't publish FP numbers at all.
 
 ```bash
-# 1. Install and start LM Studio, load a model (Qwen2.5-Coder-32B recommended)
-# 2. Enable local server in LM Studio (port 1234)
+cd backend
 
-# Clone and start
-git clone https://github.com/your-org/odin
+# Run the full benchmark harness
+python -m bench.harness
+
+# Single dataset
+python -m bench.harness --dataset clean_corpus
+python -m bench.harness --dataset secvuleval
+
+# JSON output for CI
+python -m bench.harness --json
+```
+
+Full methodology + reproducible commands: [`bench/reports/leaderboard.md`](backend/bench/reports/leaderboard.md)
+
+---
+
+## Quick Start — self-hosted
+
+### Option 1: LM Studio (local, fully private)
+
+```bash
+git clone https://github.com/RahulModugula/odin
 cd odin
 cp .env.example .env
 
-# Edit .env:
+# .env:
 # ODIN_LLM_PROVIDER=lmstudio
 # ODIN_LMSTUDIO_MODEL=qwen2.5-coder-32b
 
@@ -56,8 +153,7 @@ Open http://localhost:3000
 ### Option 2: OpenRouter (BYOK)
 
 ```bash
-cp .env.example .env
-# Edit .env:
+# .env:
 # ODIN_LLM_PROVIDER=openrouter
 # ODIN_OPENROUTER_API_KEY=sk-or-v1-...
 # ODIN_OPENROUTER_MODEL=anthropic/claude-sonnet-4-5
@@ -65,177 +161,77 @@ cp .env.example .env
 docker compose up
 ```
 
-### Option 3: OpenAI / Any OpenAI-compatible API
+### Option 3: OpenAI / any OpenAI-compatible API
 
 ```bash
 # ODIN_LLM_PROVIDER=openai
 # ODIN_LLM_API_KEY=sk-...
 # ODIN_LLM_MODEL=gpt-4o-mini
-# ODIN_LLM_BASE_URL=https://api.openai.com/v1
-
 docker compose up
 ```
 
 ---
 
-## Web UI — Review in the Browser
-
-**Keyboard shortcuts:**
-- `Cmd+Enter` (Mac) / `Ctrl+Enter` (Linux/Windows) — submit review from editor
-- Settings modal to switch between LM Studio, OpenRouter, OpenAI, or Ollama
-
----
-
-## CLI — Review Before You Push
+## CLI
 
 ```bash
-# Review a single file
-python cli/odin_review.py backend/app/main.py --rules-only
+# Install once (no checkout required)
+uvx odin review path/to/file.py
 
-# Review staged changes (pre-push check)
-python cli/odin_review.py --staged --rules-only
+# Rules only — instant, no LLM, no server
+uvx odin review path/to/file.py --rules-only
 
-# Review changes since last commit, full AI review
-python cli/odin_review.py --diff HEAD~1
+# Staged changes (pre-push check)
+uvx odin review --staged --rules-only
 
-# Quiet mode for git hooks (suppress banners)
-python cli/odin_review.py --staged --quiet && git push
+# Fail CI on high+ severity
+uvx odin review --staged --fail-on high
+
+# JSON output for scripting
+uvx odin review path/to/file.py --json | jq .
 
 # Filter by severity and confidence
-python cli/odin_review.py backend/ --min-severity high --min-confidence 0.8
+uvx odin review backend/ --min-severity high --min-confidence 0.8
+```
 
-# Output as JSON for CI/scripting
-python cli/odin_review.py --staged --json | jq .
+Install as a git pre-push hook:
 
-# Install as git pre-push hook
+```bash
 bash cli/install-hook.sh
 ```
 
-**CLI flags:**
-- `--staged` — review only git staged files
-- `--diff REF` — review changes since a commit/branch (e.g., `HEAD~1`, `origin/main`)
-- `--rules-only` — run deterministic rules only (instant, no LLM)
-- `--quiet` / `-q` — suppress output on clean scans (ideal for CI/hooks)
-- `--min-severity {critical|high|medium|low|info}` — filter by severity
-- `--min-confidence FLOAT` — filter by confidence score (0.0–1.0)
-- `--fail-on {critical|high|...}` — exit 1 if this severity is found
-- `--json` — output findings as JSON
-
-Example output:
-```
-🔍 Odin Code Review
-Files: 1  Mode: rules-only
-
-backend/app/api/routes.py
-  🔴 CRITICAL [rule] Hardcoded credential or secret  line 42
-     Line 42: Credential appears to be hardcoded. CWE-798.
-     → Use environment variables: os.environ['MY_SECRET']
-
-Summary: 1 finding(s) in 1 file(s)
-  critical: 1
-✗ 1 blocking finding(s) at high+ severity
-```
+**Flags:** `--staged` · `--diff REF` · `--rules-only` · `--quiet` · `--min-severity` · `--min-confidence` · `--fail-on` · `--json`
 
 ---
 
-## GitHub Webhook Setup
+## GitHub Webhook (manual setup)
 
-1. Generate a webhook secret:
-   ```bash
-   openssl rand -hex 32
-   ```
-2. In your GitHub repo: Settings → Webhooks → Add webhook
-   - Payload URL: `https://your-odin-instance/api/webhook/github`
-   - Content type: `application/json`
-   - Secret: your generated secret
-   - Events: Pull requests, Issue comments
-3. Set env vars:
-   ```
-   ODIN_GITHUB_TOKEN=ghp_...
-   ODIN_GITHUB_WEBHOOK_SECRET=your-secret
-   ```
-
-**Bot commands in PRs:**
-
-Comment `@odin review` to trigger a fresh review, or `@odin help` to see all commands.
-
-Odin will post reviews like this on every PR:
-
-```
-## 🔍 Odin Code Review
-
-### ✨ Summary
-This PR adds user authentication with JWT tokens...
-
-**Type:** feature   **Risk:** 🟡 medium
-
-<details>
-<summary>📋 Walkthrough</summary>
-| File | Change |
-|------|--------|
-| `auth/jwt.py` | New JWT generation and validation functions |
-| `api/routes.py` | Added /login and /logout endpoints |
-</details>
-
-### 📊 File Review Summary
-| File | Score | Critical | High | Medium | Low |
-|------|-------|----------|------|--------|-----|
-| `auth/jwt.py` | 🟡 72/100 | — | 1 | 2 | — |
+```bash
+openssl rand -hex 32  # generate webhook secret
 ```
 
-Inline comments with severity badges and fix suggestions are posted on changed lines.
+In your GitHub repo: Settings → Webhooks → Add webhook
+- Payload URL: `https://your-odin/api/webhook/github`
+- Content type: `application/json`
+- Events: Pull requests, Issue comments
 
-### Bot Commands
-
-Reply to Odin's review comments:
-- `@odin review` — trigger a fresh review
-- `@odin-bot review` — same
-
----
-
-## Configuration (.odin.yaml)
-
-Place in your repo root:
-
-```yaml
-provider:
-  name: lmstudio
-  base_url: http://localhost:1234/v1
-  model: qwen2.5-coder-32b
-
-review:
-  agents: [security, quality, docs]
-  severity_threshold: low
-
-ignore:
-  paths:
-    - vendor/
-    - node_modules/
-    - "*.min.js"
-  rules:
-    - CL001  # suppress TODO/FIXME rule
-
-quality_gate:
-  min_score: 70
-  max_critical: 0
-  block_on_fail: false
-
-rules:
-  enabled: true
-  complexity_threshold: 10
-  function_length_threshold: 50
-  nesting_depth_threshold: 4
+```bash
+# .env
+ODIN_GITHUB_TOKEN=ghp_...
+ODIN_GITHUB_WEBHOOK_SECRET=your-secret
 ```
+
+Bot commands in PRs: `@odin review` · `@odin help`
 
 ---
 
 ## Deterministic Rules Reference
 
 | ID | Name | Severity | Language |
-|----|------|----------|----------|
+|---|---|---|---|
 | PY001 | Bare except clause | HIGH | Python |
 | PY002 | Mutable default argument | HIGH | Python |
-| PY003 | Use of eval()/exec() | CRITICAL | Python |
+| PY003 | eval()/exec() | CRITICAL | Python |
 | PY004 | Hardcoded secret/credential | CRITICAL | Python |
 | PY005 | SQL string formatting | CRITICAL | Python |
 | PY006 | High cyclomatic complexity | MEDIUM | Python |
@@ -246,7 +242,18 @@ rules:
 | JS002 | console.log in code | LOW | JS/TS |
 | JS003 | XSS via innerHTML | HIGH | JS/TS |
 | JS004 | Deep callback nesting | MEDIUM | JS/TS |
+| JS005 | JWT decode without verify | HIGH | JS/TS |
+| JS006 | Prototype pollution | HIGH | JS/TS |
 | TS001 | TypeScript `any` type | MEDIUM | TypeScript |
+| TS002 | Non-null assertion overuse | MEDIUM | TypeScript |
+| GO001 | Error return value ignored | HIGH | Go |
+| GO002 | panic() in library code | HIGH | Go |
+| GO003 | Goroutine leak | MEDIUM | Go |
+| GO004 | SQL injection via fmt.Sprintf | CRITICAL | Go |
+| GO005 | Mutex without deferred Unlock | MEDIUM | Go |
+| GO006 | context.Context not first param | LOW | Go |
+| GO007 | Hardcoded IP address | LOW | Go |
+| GO008 | Unbuffered channel send deadlock | MEDIUM | Go |
 | CL001 | TODO/FIXME comment | INFO | All |
 | CL002 | File too large | MEDIUM | All |
 | CL003 | Magic number | LOW | All |
@@ -254,86 +261,34 @@ rules:
 
 ---
 
-## Architecture
+## Configuration (.odin.yaml)
 
+```yaml
+provider:
+  name: openrouter
+  model: anthropic/claude-sonnet-4-5
+
+review:
+  agents: [security, quality, docs]
+  severity_threshold: low
+
+ignore:
+  paths: [vendor/, node_modules/, "*.min.js"]
+  rules: [CL001]
+
+quality_gate:
+  min_score: 70
+  max_critical: 0
+  block_on_fail: false
 ```
-                           .odin.yaml / env vars
-                                   │
-Client / GitHub PR ──────▶ FastAPI Backend
-                                   │
-                     tree-sitter AST parse
-                                   │
-                          LangGraph fan-out
-                   ┌───────────────┼──────────────┬──────────────┐
-                   ▼               ▼              ▼              ▼
-            SecurityAgent    QualityAgent    DocsAgent     DataflowTriage
-            (LLM call)       (LLM call)    (LLM call)    (taint → LLM)
-                   │               │              │              │
-                   └───────────────┴──────────────┴──────────────┘
-                                   │
-                              Rules Engine
-                           (18+ instant, zero-cost)
-                                   │
-                              synthesize()
-                           (dedup + score + sort)
-                                   │
-                      GitHub PR Review / UI / SSE stream
-```
-
-**DataflowTriage** implements the [LLift](https://www.cs.ucr.edu/~zhiyunq/pub/oopsla24_llift.pdf) / [INFERROI](https://conf.researchr.org/details/icse-2025) architecture:
-1. Intra-procedural taint analysis identifies source→sink candidates
-2. LLM reasons about exploitability of narrowed candidates only
-3. Feedback loop suppresses known-FP (source, sink) pairs at the generator level
-
-**LLM Providers** (configured via `ODIN_LLM_PROVIDER`):
-- `lmstudio` — http://localhost:1234/v1
-- `openrouter` — https://openrouter.ai/api/v1
-- `openai` — https://api.openai.com/v1
-- `ollama` — http://localhost:11434/v1
-- `default` — any OpenAI-compatible endpoint
-
----
-
-## Benchmarks
-
-### Honest Leaderboard (reproducible — run it yourself)
-
-| Tool | Dataset | FP Rate | Recall | Precision | F1 |
-|---|---|---|---|---|---|
-| `odin-rules` | clean_corpus (60 samples) | **0.0%** | — | — | — |
-| `odin-rules` | secvuleval-subset (14 CVEs) | — | **86%** | **100%** | **0.92** |
-
-**FP rate** = false positives on 60 idiomatic, production-quality clean-code samples (Python, JS, TS, Go, Rust, Java). Every competitor we've tested exceeds 15% on the same corpus.
-
-> "We report where Odin loses, not just where it wins. Every number here is reproducible."
-
-```bash
-cd backend
-
-# Internal regression suite (instant)
-python -m eval.runner --rules-only
-
-# Honest benchmark — clean corpus FP rate + CVE recall
-python -m bench.harness
-
-# Single dataset
-python -m bench.harness --dataset clean_corpus
-python -m bench.harness --dataset secvuleval
-
-# Machine-readable JSON
-python -m bench.harness --json
-```
-
-Full leaderboard with methodology: [`bench/reports/leaderboard.md`](backend/bench/reports/leaderboard.md)
 
 ---
 
 ## MCP Server
 
-Use Odin as an MCP tool inside Claude Code or Cursor:
+Use Odin as a tool inside Claude Code or Cursor:
 
 ```json
-// ~/.claude/claude_desktop_config.json
 {
   "mcpServers": {
     "odin": {
@@ -349,58 +304,22 @@ Available tools: `review_code`, `analyze_file`, `get_findings`, `query_codebase`
 
 ---
 
-## Self-hosting
-
-```bash
-# Production (2 workers, non-root user)
-docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-# With Prometheus metrics
-curl http://localhost:8000/metrics
-```
-
-Environment variables reference: see `.env.example`
-
----
-
 ## Development
 
 ```bash
-# Backend
 cd backend
 uv venv && uv pip install -e ".[dev]"
 uvicorn app.main:app --reload
 
-# Frontend
-cd frontend
-npm install
-npm run dev
+# Tests
+pytest tests/ -v --cov=app
 
-# Run tests
-cd backend
-pytest tests/ -v
+# Lint
+ruff check . && ruff format --check . && mypy --strict app/
 
 # Benchmark
-python -m eval.runner --rules-only
+python -m bench.harness --dataset clean_corpus
 ```
-
----
-
-## vs CodeRabbit
-
-| Feature | Odin | CodeRabbit Free | CodeRabbit Pro |
-|---------|------|-----------------|----------------|
-| Self-hostable | ✅ | ❌ | ❌ |
-| Local LLMs (LM Studio) | ✅ | ❌ | ❌ |
-| BYOK (OpenRouter) | ✅ | ❌ | ✅ |
-| GitHub webhook | ✅ | ✅ | ✅ |
-| PR summary & walkthrough | ✅ | ✅ | ✅ |
-| Inline comments | ✅ | ✅ | ✅ |
-| Deterministic rules | ✅ (18+) | ✅ (40+) | ✅ (40+) |
-| CLI pre-push review | ✅ | ❌ | ❌ |
-| Open source | ✅ | ❌ | ❌ |
-| Cost | Free | Free (limited) | $24/dev/mo |
-| Data privacy | ✅ Full | ❌ | ❌ |
 
 ---
 
