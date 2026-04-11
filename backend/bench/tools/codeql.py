@@ -97,17 +97,19 @@ def _parse_sarif(sarif_data: dict, tool_name: str) -> list[ToolFinding]:
             line_start = region.get("startLine")
             line_end = region.get("endLine", line_start)
 
-        findings.append(ToolFinding(
-            tool=tool_name,
-            rule_id=rule_id,
-            title=message,
-            severity=severity,
-            line_start=line_start,
-            line_end=line_end,
-            category="security",
-            confidence=1.0,
-            raw=result,
-        ))
+        findings.append(
+            ToolFinding(
+                tool=tool_name,
+                rule_id=rule_id,
+                title=message,
+                severity=severity,
+                line_start=line_start,
+                line_end=line_end,
+                category="security",
+                confidence=1.0,
+                raw=result,
+            )
+        )
 
     return findings
 
@@ -154,7 +156,9 @@ class CodeQLRunner(ToolRunner):
                 # Step 1: create CodeQL database from source directory
                 db_result = subprocess.run(
                     [
-                        "codeql", "database", "create",
+                        "codeql",
+                        "database",
+                        "create",
                         str(db_dir),
                         f"--language={codeql_lang}",
                         f"--source-root={src_dir}",
@@ -172,7 +176,9 @@ class CodeQLRunner(ToolRunner):
                 # Step 2: analyze using the appropriate query pack
                 analyze_result = subprocess.run(
                     [
-                        "codeql", "database", "analyze",
+                        "codeql",
+                        "database",
+                        "analyze",
                         str(db_dir),
                         query_pack,
                         "--format=sarif-latest",

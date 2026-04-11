@@ -52,7 +52,8 @@ class SemgrepRunner(ToolRunner):
             result = subprocess.run(
                 [
                     "semgrep",
-                    "--config", "auto",
+                    "--config",
+                    "auto",
                     "--json",
                     "--no-git-ignore",
                     "--quiet",
@@ -72,17 +73,19 @@ class SemgrepRunner(ToolRunner):
             findings = []
             for r in data.get("results", []):
                 sev_raw = r.get("extra", {}).get("severity", "INFO").upper()
-                findings.append(ToolFinding(
-                    tool=self.name,
-                    rule_id=r.get("check_id"),
-                    title=r.get("extra", {}).get("message", r.get("check_id", "")),
-                    severity=_SEVERITY_MAP.get(sev_raw, SeverityLevel.MEDIUM),
-                    line_start=r.get("start", {}).get("line"),
-                    line_end=r.get("end", {}).get("line"),
-                    category="security",
-                    confidence=1.0,
-                    raw=r,
-                ))
+                findings.append(
+                    ToolFinding(
+                        tool=self.name,
+                        rule_id=r.get("check_id"),
+                        title=r.get("extra", {}).get("message", r.get("check_id", "")),
+                        severity=_SEVERITY_MAP.get(sev_raw, SeverityLevel.MEDIUM),
+                        line_start=r.get("start", {}).get("line"),
+                        line_end=r.get("end", {}).get("line"),
+                        category="security",
+                        confidence=1.0,
+                        raw=r,
+                    )
+                )
             return findings, elapsed_ms
 
         except (subprocess.TimeoutExpired, json.JSONDecodeError, Exception):

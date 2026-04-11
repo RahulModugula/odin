@@ -348,12 +348,14 @@ def load_samples() -> list[BenchSample]:
     """Load SecVulEval subset as BenchSamples."""
     samples = []
     for s in SECVULEVAL_SUBSET:
-        samples.append(BenchSample(
-            id=s["id"],
-            language=s["language"],
-            code=s["code"],
-            label=SampleLabel(s["label"]),
-            dataset=DATASET_NAME,
-            notes=s.get("notes", ""),
-        ))
+        samples.append(
+            BenchSample(
+                id=s["id"],
+                language=s["language"],
+                code=s["code"],
+                label=SampleLabel(s["label"]),
+                dataset=DATASET_NAME,
+                notes=s.get("notes", ""),
+            )
+        )
     return samples

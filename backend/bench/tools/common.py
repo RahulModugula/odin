@@ -11,6 +11,7 @@ from bench.schemas import SampleLabel, ToolFinding
 @dataclass
 class BenchSample:
     """A single sample to run through a tool."""
+
     id: str
     language: str
     code: str

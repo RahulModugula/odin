@@ -28,6 +28,7 @@ class OdinRulesRunner(ToolRunner):
         if not self._initialized:
             from app.rules.engine import rule_engine
             from app.rules.registry import register_all
+
             if not rule_engine.is_initialized():
                 register_all()
             self._initialized = True
