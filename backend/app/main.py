@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 
 import app.graph_rag._store_ref as _store_ref
 import app.services._feedback_ref as _feedback_ref
+from app.api.github_app import github_app_router
 from app.api.routes import router
 from app.api.webhook import webhook_router
 from app.config import settings
@@ -116,6 +117,7 @@ async def global_exception_handler(request: Request, exc: Exception) -> JSONResp
 
 app.include_router(router, prefix="/api")
 app.include_router(webhook_router, prefix="/api")
+app.include_router(github_app_router, prefix="/api/github")
 
 # Expose Prometheus metrics
 app.add_route("/metrics", metrics_endpoint)  # type: ignore[arg-type]
