@@ -39,11 +39,15 @@ REPORTS_DIR = Path(__file__).parent / "reports"
 
 def _get_git_sha() -> str:
     try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=Path(__file__).parent.parent,
-            stderr=subprocess.DEVNULL,
-        ).decode().strip()
+        return (
+            subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=Path(__file__).parent.parent,
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
     except Exception:
         return "unknown"
 
@@ -114,6 +118,7 @@ def run_benchmark(
 # ──────────────────────────────────────────────────────────────────────────────
 # Reporting
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def _print_metrics_table(metrics: list[DatasetMetrics]) -> None:
     print()
@@ -214,7 +219,10 @@ def _save_report(report: BenchmarkReport) -> Path:
                 "n_samples": m.n_samples,
                 "n_vuln": m.n_vuln,
                 "n_clean": m.n_clean,
-                "tp": m.tp, "fp": m.fp, "tn": m.tn, "fn": m.fn,
+                "tp": m.tp,
+                "fp": m.fp,
+                "tn": m.tn,
+                "fn": m.fn,
                 "precision": m.precision,
                 "recall": m.recall,
                 "f1": m.f1,
@@ -236,6 +244,7 @@ def _save_report(report: BenchmarkReport) -> Path:
 # ──────────────────────────────────────────────────────────────────────────────
 # CLI
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Odin benchmark harness")
@@ -265,19 +274,30 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     if args.json:
-        print(json.dumps({
-            "run_id": report.run_id,
-            "commit_sha": report.commit_sha,
-            "metrics": [
+        print(
+            json.dumps(
                 {
-                    "tool": m.tool, "dataset": m.dataset,
-                    "precision": m.precision, "recall": m.recall,
-                    "f1": m.f1, "fp_rate": m.fp_rate,
-                    "tp": m.tp, "fp": m.fp, "tn": m.tn, "fn": m.fn,
-                }
-                for m in report.metrics
-            ],
-        }, indent=2))
+                    "run_id": report.run_id,
+                    "commit_sha": report.commit_sha,
+                    "metrics": [
+                        {
+                            "tool": m.tool,
+                            "dataset": m.dataset,
+                            "precision": m.precision,
+                            "recall": m.recall,
+                            "f1": m.f1,
+                            "fp_rate": m.fp_rate,
+                            "tp": m.tp,
+                            "fp": m.fp,
+                            "tn": m.tn,
+                            "fn": m.fn,
+                        }
+                        for m in report.metrics
+                    ],
+                },
+                indent=2,
+            )
+        )
     else:
         _print_metrics_table(report.metrics)
 

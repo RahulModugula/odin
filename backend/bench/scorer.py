@@ -60,15 +60,17 @@ def run_tool_on_dataset(
         try:
             findings, latency_ms = runner.run(sample)
         except Exception as exc:
-            results.append(SampleResult(
-                tool=runner.name,
-                dataset=sample.dataset,
-                sample_id=sample.id,
-                language=sample.language,
-                label=sample.label,
-                findings=[],
-                error=str(exc),
-            ))
+            results.append(
+                SampleResult(
+                    tool=runner.name,
+                    dataset=sample.dataset,
+                    sample_id=sample.id,
+                    language=sample.language,
+                    label=sample.label,
+                    findings=[],
+                    error=str(exc),
+                )
+            )
             continue
         result = classify(sample, findings, runner.name, latency_ms, min_confidence)
         results.append(result)
