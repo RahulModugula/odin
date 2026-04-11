@@ -30,8 +30,8 @@ from bench.schemas import (
     SampleLabel,
 )
 from bench.scorer import run_tool_on_dataset
-from bench.tools.common import BenchSample, ToolRunner
 from bench.tools.codeql import CodeQLRunner
+from bench.tools.common import BenchSample, ToolRunner
 from bench.tools.odin import OdinRulesRunner
 from bench.tools.semgrep import SemgrepRunner
 
