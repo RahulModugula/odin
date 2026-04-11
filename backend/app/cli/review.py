@@ -496,6 +496,10 @@ Examples:
         help="Suppress banner and success messages (findings always shown)",
     )
 
+    # ---- init subcommand ----
+    init_parser = sub.add_parser("init", help="Set up Odin in the current repository")
+    init_parser.add_argument("--hook", action="store_true", help="Also install git pre-push hook")
+
     return parser
 
 
@@ -618,6 +622,10 @@ def main() -> None:
 
     if args.command == "review":
         _run_review(args)
+    elif args.command == "init":
+        from app.cli.init import run_init
+
+        run_init(args)
     else:
         parser.print_help()
         sys.exit(0)
