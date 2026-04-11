@@ -253,6 +253,52 @@ def run_full_review(code: str, language_str: str, filename: str) -> list[dict]: 
         return run_rules_only(code, language_str)
 
 
+def run_local_review(code: str, language_str: str, filename: str) -> list[dict]:
+    """Run full LangGraph pipeline in-process (no running server required)."""
+    import asyncio
+
+    try:
+        from app.agents.graph import review_graph
+        from app.models.enums import Language
+        from app.models.state import ReviewState
+
+        state: ReviewState = {
+            "code": code,
+            "language": language_str,
+            "ast_summary": "",
+            "metrics": None,
+            "findings": [],
+            "agent_outputs": [],
+            "overall_score": 100,
+            "summary": "",
+            "codebase_context": "",
+            "file_path": filename,
+        }
+
+        result = asyncio.get_event_loop().run_until_complete(
+            review_graph.ainvoke(state, config={"callbacks": []})
+        )
+
+        return [
+            {
+                "severity": f.severity.value if hasattr(f.severity, "value") else str(f.severity),
+                "category": f.category.value if hasattr(f.category, "value") else str(f.category),
+                "title": f.title,
+                "description": f.description,
+                "line_start": f.line_start,
+                "line_end": f.line_end,
+                "suggestion": f.suggestion,
+                "fix_code": getattr(f, "fix_code", None),
+                "confidence": f.confidence,
+                "source": f.source or "ai",
+            }
+            for f in result.get("findings", [])
+        ]
+    except Exception as exc:
+        print(yellow(f"  ⚠  Local review failed ({exc}), falling back to rules-only"))
+        return run_rules_only(code, language_str)
+
+
 # --------------------------------------------------------------------------- #
 # Output                                                                       #
 # --------------------------------------------------------------------------- #
@@ -439,6 +485,11 @@ Examples:
         help="Output findings as SARIF 2.1.0 (for GitHub Security tab)",
     )
     review.add_argument(
+        "--local",
+        action="store_true",
+        help="Run full AI review locally (requires LLM API key, no server needed)",
+    )
+    review.add_argument(
         "--quiet",
         "-q",
         action="store_true",
@@ -479,7 +530,7 @@ def _run_review(args: argparse.Namespace) -> None:
 
     if not args.quiet:
         print(f"\n{bold('🔍 Odin Code Review')}\n")
-        mode = "rules-only" if args.rules_only else "full (rules + AI)"
+        mode = "rules-only" if args.rules_only else "local (rules + AI)" if getattr(args, 'local', False) else "full (rules + AI)"
         print(f"{dim('Files:')} {len(files)}  {dim('Mode:')} {mode}\n")
 
     all_findings: list[dict] = []  # type: ignore[type-arg]
@@ -497,6 +548,8 @@ def _run_review(args: argparse.Namespace) -> None:
 
         if args.rules_only:
             findings = run_rules_only(code, lang)
+        elif getattr(args, 'local', False):
+            findings = run_local_review(code, lang, str(filepath))
         else:
             findings = run_full_review(code, lang, str(filepath))
 
