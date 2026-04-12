@@ -244,15 +244,36 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
 
     try:
         from app.agents.llm import get_llm
+        from app.dataflow.interprocedural import InterProceduralTaintTracker
         from app.dataflow.registry import sanitizer_registry, sink_registry, source_registry
         from app.dataflow.tracker import IntraProceduralTaintTracker
         from app.dataflow.triage import TRIAGE_CONFIDENCE_FLOOR, triage_all
 
         lang = Language(state["language"])
-        tracker = IntraProceduralTaintTracker(
+
+        # Phase A-intra: intra-procedural taint analysis
+        intra_tracker = IntraProceduralTaintTracker(
             source_registry, sink_registry, sanitizer_registry, lang
         )
-        candidates = tracker.analyze(state["code"])
+        candidates = intra_tracker.analyze(state["code"])
+
+        # Phase A-inter: interprocedural analysis within the same file
+        # Detects cross-function taint flows (e.g. function A returns tainted
+        # data, function B calls A and passes result to a sink).
+        try:
+            file_path = state.get("file_path", "unknown.py")
+            inter_tracker = InterProceduralTaintTracker(
+                source_registry, sink_registry, sanitizer_registry, lang
+            )
+            inter_candidates = inter_tracker.analyze({file_path: state["code"]})
+            # Merge, deduplicating by candidate_id
+            seen_ids = {c.candidate_id for c in candidates}
+            for ic in inter_candidates:
+                if ic.candidate_id not in seen_ids:
+                    candidates.append(ic)
+                    seen_ids.add(ic.candidate_id)
+        except Exception:
+            pass  # interprocedural is best-effort; intra results still used
 
         if not candidates:
             return {"findings": [], "agent_outputs": []}

@@ -113,15 +113,44 @@ class InterProceduralTaintTracker:
         func_def: FunctionDef,
         candidates: list[TaintCandidate],
     ) -> _ReturnTaint | None:
-        """Check if any tainted variable appears in the function's return statements."""
-        if not func_def.return_lines or not candidates:
+        """Check if any tainted variable appears in the function's return statements.
+
+        Scans the function body directly for taint sources (not just from
+        candidates) so that functions with a source + return but no local sink
+        are still recognized as returning tainted data.
+        """
+        if not func_def.return_lines:
             return None
 
-        # Collect tainted variable names from candidates' hop chains
+        # Strategy 1: collect tainted vars from candidates (has source+sink)
         tainted_vars: dict[str, tuple[SourceSpec, list[TaintHop]]] = {}
         for c in candidates:
             for hop in c.hops:
                 tainted_vars[hop.variable] = (c.source, c.hops)
+
+        # Strategy 2: scan function body for taint sources even without a sink
+        assign_py = re.compile(r"^(\w+)\s*=\s*(.+)$")
+        for lineno, raw_line in enumerate(func_def.body.splitlines(), func_def.line_start):
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            source_matches = self._src.matches(raw_line, self._lang)
+            for spec in source_matches:
+                m = assign_py.match(line)
+                if m:
+                    var = m.group(1)
+                    if var not in tainted_vars:
+                        hop = TaintHop(
+                            line=lineno,
+                            col=raw_line.find(var),
+                            variable=var,
+                            operation="assign",
+                            snippet=raw_line.rstrip(),
+                        )
+                        tainted_vars[var] = (spec, [hop])
+
+        if not tainted_vars:
+            return None
 
         # Check each return line for tainted variables
         for ret_expr in func_def.return_lines:
