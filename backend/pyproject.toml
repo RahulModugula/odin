@@ -4,10 +4,10 @@ version = "0.1.0"
 description = "AI-powered multi-agent code review system"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.115.0",
-    "uvicorn[standard]>=0.34.0",
-    "pydantic>=2.9.0",
-    "pydantic-settings>=2.6.0",
+    "fastapi>=0.135.3",
+    "uvicorn[standard]>=0.44.0",
+    "pydantic>=2.13.0",
+    "pydantic-settings>=2.13.1",
     "tree-sitter>=0.23.0",
     "tree-sitter-python>=0.23.0",
     "tree-sitter-javascript>=0.23.0",
