@@ -230,7 +230,7 @@ class SqlStringFormattingRule(Rule):
                                 "Use parameterized queries: "
                                 "`cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))`"
                             ),
-                            fix_code="cursor.execute(\"SELECT * FROM users WHERE id = %s\", (user_id,))",
+                            fix_code='cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))',
                             confidence=0.8,
                         )
                     )

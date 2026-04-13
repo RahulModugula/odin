@@ -12,7 +12,7 @@ Bounded: max 5 files, MAX_CANDIDATES=20 total, depth-limited to avoid explosion.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from app.dataflow.call_graph import CallGraph, CallSite, FunctionDef, build_call_graph
 from app.dataflow.registry import SanitizerRegistry, SinkRegistry, SourceRegistry
@@ -21,7 +21,7 @@ from app.dataflow.schemas import (
     TaintCandidate,
     TaintHop,
 )
-from app.dataflow.tracker import IntraProceduralTaintTracker, MAX_CANDIDATES
+from app.dataflow.tracker import MAX_CANDIDATES, IntraProceduralTaintTracker
 from app.models.enums import Language
 
 
@@ -92,7 +92,9 @@ class InterProceduralTaintTracker:
 
         # Phase 3: propagate taint across call boundaries
         cross_candidates = self._propagate_cross_function(
-            call_graph, return_taints, file_contents,
+            call_graph,
+            return_taints,
+            file_contents,
         )
         all_candidates.extend(cross_candidates)
 
@@ -238,7 +240,7 @@ class InterProceduralTaintTracker:
         tainted_var = m.group(1)
 
         # Now scan remaining lines in the caller for sinks using the tainted var
-        for offset, line in enumerate(lines[call_line_offset + 1:], call_line_offset + 1):
+        for offset, line in enumerate(lines[call_line_offset + 1 :], call_line_offset + 1):
             abs_line = caller.line_start + offset
             sink_matches = self._snk.matches(line, self._lang)
             for sink_spec in sink_matches:
@@ -270,17 +272,19 @@ class InterProceduralTaintTracker:
                     snippet_lines.append(f"  >> {hop.snippet}")
                 snippet_lines.append(f"  >> {line.rstrip()}")
 
-                candidates.append(TaintCandidate(
-                    candidate_id=candidate_id,
-                    language=self._lang,
-                    function_name=caller.name,
-                    source=source,
-                    source_location=(prior_hops[0].line if prior_hops else abs_line, 0),
-                    sink=sink_spec,
-                    sink_location=(abs_line, line.find(sink_spec.call_pattern)),
-                    hops=prior_hops + [sink_hop],
-                    snippet="\n".join(snippet_lines),
-                ))
+                candidates.append(
+                    TaintCandidate(
+                        candidate_id=candidate_id,
+                        language=self._lang,
+                        function_name=caller.name,
+                        source=source,
+                        source_location=(prior_hops[0].line if prior_hops else abs_line, 0),
+                        sink=sink_spec,
+                        sink_location=(abs_line, line.find(sink_spec.call_pattern)),
+                        hops=prior_hops + [sink_hop],
+                        snippet="\n".join(snippet_lines),
+                    )
+                )
 
                 if len(candidates) >= MAX_CANDIDATES:
                     return candidates

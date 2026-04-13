@@ -972,6 +972,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+cli = [
+    { name = "colorama" },
+]
 dev = [
     { name = "mypy" },
     { name = "pytest" },
@@ -993,6 +996,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "colorama", marker = "extra == 'cli'", specifier = ">=0.4.6" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "httpx", specifier = ">=0.27.0" },
     { name = "langchain-anthropic", specifier = ">=0.3.0" },
@@ -1022,7 +1026,7 @@ requires-dist = [
     { name = "tree-sitter-typescript", specifier = ">=0.23.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["cli", "dev"]
 
 [package.metadata.requires-dev]
 dev = [

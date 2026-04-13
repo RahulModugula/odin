@@ -13,12 +13,11 @@ from __future__ import annotations
 
 from app.dataflow.call_graph import (
     MAX_CROSS_FILE_DEPTH,
-    CallGraph,
     build_call_graph,
 )
 from app.dataflow.interprocedural import InterProceduralTaintTracker
 from app.dataflow.registry import sanitizer_registry, sink_registry, source_registry
-from app.dataflow.schemas import SinkKind, SourceKind
+from app.dataflow.schemas import SinkKind
 from app.models.enums import Language
 
 
@@ -147,9 +146,7 @@ def handler():
     # candidate because shlex.quote sanitizes before os.system.
     # The cross-function pass should also respect sanitizers.
     cross_shell = [
-        c for c in candidates
-        if c.sink.kind == SinkKind.SHELL_EXEC
-        and c.function_name == "handler"
+        c for c in candidates if c.sink.kind == SinkKind.SHELL_EXEC and c.function_name == "handler"
     ]
     # shlex.quote is a sanitizer, so no exploitable path through handler
     assert len(cross_shell) == 0, (

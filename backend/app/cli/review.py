@@ -259,7 +259,6 @@ def run_local_review(code: str, language_str: str, filename: str) -> list[dict]:
 
     try:
         from app.agents.graph import review_graph
-        from app.models.enums import Language
         from app.models.state import ReviewState
 
         state: ReviewState = {
@@ -340,60 +339,75 @@ def _to_sarif(all_findings: list[dict], files: list[Path]) -> dict:
 
     for f in all_findings:
         rule_id = f.get("title", "unknown").replace(" ", "-").lower()[:50]
+        _sev_map = {
+            "critical": "error",
+            "high": "error",
+            "medium": "warning",
+            "low": "note",
+            "info": "note",
+        }
         if rule_id not in rules:
             rules[rule_id] = {
                 "id": rule_id,
                 "shortDescription": {"text": f.get("title", "")},
                 "fullDescription": {"text": f.get("description", "")},
-                "defaultConfiguration": {
-                    "level": {"critical": "error", "high": "error", "medium": "warning", "low": "note", "info": "note"}.get(f.get("severity", "info"), "note")
-                },
+                "defaultConfiguration": {"level": _sev_map.get(f.get("severity", "info"), "note")},
             }
 
         result = {
             "ruleId": rule_id,
-            "level": {"critical": "error", "high": "error", "medium": "warning", "low": "note", "info": "note"}.get(f.get("severity", "info"), "note"),
+            "level": _sev_map.get(f.get("severity", "info"), "note"),
             "message": {"text": f.get("description", f.get("title", ""))},
         }
 
         if f.get("line_start"):
-            result["locations"] = [{
-                "physicalLocation": {
-                    "artifactLocation": {"uri": f.get("file", "unknown")},
-                    "region": {"startLine": f["line_start"]},
+            result["locations"] = [
+                {
+                    "physicalLocation": {
+                        "artifactLocation": {"uri": f.get("file", "unknown")},
+                        "region": {"startLine": f["line_start"]},
+                    }
                 }
-            }]
+            ]
             if f.get("line_end"):
                 result["locations"][0]["physicalLocation"]["region"]["endLine"] = f["line_end"]
 
         if f.get("fix_code"):
-            result["fixes"] = [{
-                "description": {"text": f.get("suggestion", "Apply fix")},
-                "artifactChanges": [{
-                    "artifactLocation": {"uri": f.get("file", "unknown")},
-                    "replacements": [{
-                        "deletedRegion": {"startLine": f.get("line_start", 1)},
-                        "insertedContent": {"text": f["fix_code"]},
-                    }],
-                }],
-            }]
+            result["fixes"] = [
+                {
+                    "description": {"text": f.get("suggestion", "Apply fix")},
+                    "artifactChanges": [
+                        {
+                            "artifactLocation": {"uri": f.get("file", "unknown")},
+                            "replacements": [
+                                {
+                                    "deletedRegion": {"startLine": f.get("line_start", 1)},
+                                    "insertedContent": {"text": f["fix_code"]},
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
 
         results.append(result)
 
     return {
         "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
         "version": "2.1.0",
-        "runs": [{
-            "tool": {
-                "driver": {
-                    "name": "odin",
-                    "version": "0.1.0",
-                    "informationUri": "https://github.com/RahulModugula/odin",
-                    "rules": list(rules.values()),
-                }
-            },
-            "results": results,
-        }],
+        "runs": [
+            {
+                "tool": {
+                    "driver": {
+                        "name": "odin",
+                        "version": "0.1.0",
+                        "informationUri": "https://github.com/RahulModugula/odin",
+                        "rules": list(rules.values()),
+                    }
+                },
+                "results": results,
+            }
+        ],
     }
 
 
@@ -534,7 +548,12 @@ def _run_review(args: argparse.Namespace) -> None:
 
     if not args.quiet:
         print(f"\n{bold('🔍 Odin Code Review')}\n")
-        mode = "rules-only" if args.rules_only else "local (rules + AI)" if getattr(args, 'local', False) else "full (rules + AI)"
+        if args.rules_only:
+            mode = "rules-only"
+        elif getattr(args, "local", False):
+            mode = "local (rules + AI)"
+        else:
+            mode = "full (rules + AI)"
         print(f"{dim('Files:')} {len(files)}  {dim('Mode:')} {mode}\n")
 
     all_findings: list[dict] = []  # type: ignore[type-arg]
@@ -552,7 +571,7 @@ def _run_review(args: argparse.Namespace) -> None:
 
         if args.rules_only:
             findings = run_rules_only(code, lang)
-        elif getattr(args, 'local', False):
+        elif getattr(args, "local", False):
             findings = run_local_review(code, lang, str(filepath))
         else:
             findings = run_full_review(code, lang, str(filepath))

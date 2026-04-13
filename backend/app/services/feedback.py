@@ -11,6 +11,9 @@ from app.config import settings
 
 logger = structlog.get_logger()
 
+# Exposed for tests — mirrors settings.feedback_taint_threshold default
+_TAINT_PAIR_FP_THRESHOLD = 2
+
 
 class FeedbackService:
     """Track user feedback on findings to build team-specific suppressions.

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from app.models.enums import Language
 
@@ -140,8 +139,11 @@ def _extract_functions(code: str, file_path: str, language: Language) -> list[Fu
             if name is None:
                 continue
 
-            params = [p.strip().split(":")[0].split("=")[0].strip()
-                      for p in params_raw.split(",") if p.strip()]
+            params = [
+                p.strip().split(":")[0].split("=")[0].strip()
+                for p in params_raw.split(",")
+                if p.strip()
+            ]
             # Remove 'self' from Python params
             if language == Language.PYTHON and params and params[0] == "self":
                 params = params[1:]
@@ -179,9 +181,7 @@ def _extract_functions(code: str, file_path: str, language: Language) -> list[Fu
     # Capture the last function
     if current_func is not None:
         current_func.line_end = len(lines)
-        current_func.body = "\n".join(
-            lines[current_func.line_start - 1 : current_func.line_end]
-        )
+        current_func.body = "\n".join(lines[current_func.line_start - 1 : current_func.line_end])
         functions.append(current_func)
 
     return functions
@@ -218,10 +218,33 @@ def _extract_call_sites(
 
             # Skip language keywords and builtins
             if callee_name in {
-                "if", "for", "while", "return", "print", "len", "range", "str",
-                "int", "float", "bool", "list", "dict", "set", "tuple", "type",
-                "isinstance", "hasattr", "getattr", "setattr", "super",
-                "def", "class", "import", "from", "async", "await",
+                "if",
+                "for",
+                "while",
+                "return",
+                "print",
+                "len",
+                "range",
+                "str",
+                "int",
+                "float",
+                "bool",
+                "list",
+                "dict",
+                "set",
+                "tuple",
+                "type",
+                "isinstance",
+                "hasattr",
+                "getattr",
+                "setattr",
+                "super",
+                "def",
+                "class",
+                "import",
+                "from",
+                "async",
+                "await",
             }:
                 continue
 
@@ -229,13 +252,15 @@ def _extract_call_sites(
             if callee_name == enclosing.name:
                 continue
 
-            call_sites.append(CallSite(
-                caller=enclosing.name,
-                callee=callee_name,
-                file_path=file_path,
-                line=lineno,
-                arg_text=arg_text,
-            ))
+            call_sites.append(
+                CallSite(
+                    caller=enclosing.name,
+                    callee=callee_name,
+                    file_path=file_path,
+                    line=lineno,
+                    arg_text=arg_text,
+                )
+            )
 
     return call_sites
 
