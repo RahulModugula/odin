@@ -1,15 +1,25 @@
 """Odin Benchmark Harness.
 
 Reproducible head-to-head evaluation of code review tools against:
-  - clean_corpus : 200+ clean samples → measures false positive rate
-  - secvuleval   : 13 real CVE/CWE samples → measures recall on known vulns
+  - clean_corpus    : 200+ clean samples → measures false positive rate
+  - secvuleval      : 13 real CVE/CWE samples → measures recall on known vulns
+  - swebench        : 50 SWE-bench Verified bug-detection samples
+  - cvebench        : 50 critical CVE samples (SOTA ~13% recall — hard)
 
 Usage:
-    python -m bench.harness                     # all datasets, all available tools
-    python -m bench.harness --dataset clean     # FP-rate benchmark only
-    python -m bench.harness --dataset vulns     # recall benchmark only
-    python -m bench.harness --tool odin-rules   # single tool
-    python -m bench.harness --json              # machine-readable JSON output
+    python -m bench.harness                            # all datasets, all tools
+    python -m bench.harness --dataset clean_corpus     # FP-rate benchmark only
+    python -m bench.harness --dataset swebench         # SWE-bench subset
+    python -m bench.harness --dataset cvebench         # CVE-Bench crits
+    python -m bench.harness --tool odin-rules          # single tool
+    python -m bench.harness --seed 42                  # reproducible shuffle
+    python -m bench.harness --json                     # machine-readable JSON
+
+Reproducibility contract:
+    Every result row in the leaderboard includes the exact command to reproduce
+    it, e.g.:
+        python -m bench.harness --dataset secvuleval --tool odin-rules --seed 42
+    Dataset versions are pinned by DATASET_VERSION constants in each loader.
 """
 
 from __future__ import annotations
@@ -24,7 +34,9 @@ from pathlib import Path
 
 from bench.datasets.clean_corpus import CLEAN_SAMPLES
 from bench.datasets.clean_corpus_extended import EXTENDED_CLEAN_SAMPLES
+from bench.datasets.cvebench import load_samples as load_cvebench
 from bench.datasets.secvuleval import load_samples as load_secvuleval
+from bench.datasets.swebench_verified import load_samples as load_swebench
 from bench.schemas import (
     BenchmarkReport,
     DatasetMetrics,
@@ -35,6 +47,7 @@ from bench.tools.codeql import CodeQLRunner
 from bench.tools.coderabbit import CodeRabbitRunner
 from bench.tools.common import BenchSample, ToolRunner
 from bench.tools.copilot_review import CopilotReviewRunner
+from bench.tools.greptile import GreptileRunner
 from bench.tools.odin import OdinRulesRunner
 from bench.tools.qodo import QodoRunner
 from bench.tools.semgrep import SemgrepRunner
@@ -80,6 +93,7 @@ def _build_runners(filter_tool: str | None) -> list[ToolRunner]:
         CodeRabbitRunner(),
         CopilotReviewRunner(),
         QodoRunner(),
+        GreptileRunner(),
     ]
     available = [r for r in candidates if r.is_available()]
     if filter_tool:
@@ -90,8 +104,9 @@ def _build_runners(filter_tool: str | None) -> list[ToolRunner]:
 def run_benchmark(
     datasets: list[str] | None = None,
     filter_tool: str | None = None,
+    seed: int | None = None,
 ) -> BenchmarkReport:
-    datasets = datasets or ["clean_corpus", "secvuleval"]
+    datasets = datasets or ["clean_corpus", "secvuleval", "swebench", "cvebench"]
     runners = _build_runners(filter_tool)
 
     all_samples: list[BenchSample] = []
@@ -99,6 +114,10 @@ def run_benchmark(
         all_samples.extend(_load_clean_corpus())
     if "secvuleval" in datasets:
         all_samples.extend(load_secvuleval())
+    if "swebench" in datasets:
+        all_samples.extend(load_swebench(seed=seed))
+    if "cvebench" in datasets:
+        all_samples.extend(load_cvebench(seed=seed))
 
     # Collect the actual dataset names used (may differ from CLI alias)
     actual_dataset_names = list({s.dataset for s in all_samples})
@@ -125,6 +144,7 @@ def run_benchmark(
         tools=[r.name for r in runners],
         metrics=all_metrics,
         sample_results=all_results,
+        seed=seed,
     )
 
 
@@ -148,13 +168,16 @@ def _print_metrics_table(metrics: list[DatasetMetrics]) -> None:
 
 
 def _generate_leaderboard_md(report: BenchmarkReport) -> str:
+    seed_str = f" --seed {report.seed}" if report.seed is not None else ""
+    reproduce_cmd = f"python -m bench.harness{seed_str}"
+
     lines = [
         "# Odin Benchmark Leaderboard",
         "",
         f"**Run**: `{report.run_id}` | **Commit**: `{report.commit_sha}` | **Date**: {report.timestamp[:10]}",
         "",
-        "> Reproducible benchmark of AI code review tools on clean code (false positive rate) and real CVE samples (recall).",
-        "> Every number here can be reproduced: `python -m bench.harness`",
+        "> Reproducible benchmark of AI code review tools on clean code (false positive rate) and real vulnerability samples (recall).",
+        f"> Every number here can be reproduced: `{reproduce_cmd}`",
         "> We report **where Odin loses**, not just where it wins.",
         "",
         "## Key Metric: False Positive Rate on Clean Code",
@@ -168,45 +191,60 @@ def _generate_leaderboard_md(report: BenchmarkReport) -> str:
     clean_metrics = [m for m in report.metrics if m.dataset == "clean_corpus"]
     if clean_metrics:
         lines += [
-            "| Tool | FP Rate | False Positives | Samples |",
-            "|---|---|---|---|",
+            "| Tool | FP Rate | False Positives | Samples | Reproduce |",
+            "|---|---|---|---|---|",
         ]
         for m in sorted(clean_metrics, key=lambda x: x.fp_rate):
             fp_pct = f"{m.fp_rate:.1%}"
-            lines.append(f"| `{m.tool}` | {fp_pct} | {m.fp}/{m.n_clean} | {m.n_samples} |")
+            cmd = f"`python -m bench.harness --dataset clean_corpus --tool {m.tool}{seed_str}`"
+            lines.append(f"| `{m.tool}` | {fp_pct} | {m.fp}/{m.n_clean} | {m.n_samples} | {cmd} |")
         lines.append("")
 
-    # Recall table (vuln datasets)
-    vuln_metrics = [m for m in report.metrics if m.dataset != "clean_corpus"]
-    if vuln_metrics:
+    # Recall table per dataset
+    dataset_order = ["secvuleval-subset", "swebench-verified", "cvebench-crits"]
+    dataset_labels = {
+        "secvuleval-subset": "SecVulEval (Python/JS CVEs)",
+        "swebench-verified": "SWE-bench Verified (bug-detection)",
+        "cvebench-crits":    "CVE-Bench (critical CVEs, SOTA ~13%)",
+    }
+
+    for ds in dataset_order:
+        ds_metrics = [m for m in report.metrics if m.dataset == ds]
+        if not ds_metrics:
+            continue
+        label = dataset_labels.get(ds, ds)
         lines += [
-            "## Recall on Known Vulnerabilities",
+            f"## Recall on {label}",
             "",
-            "| Tool | Dataset | Recall | Precision | F1 | TP | FN |",
+            "| Tool | Recall | Precision | F1 | TP | FN | Reproduce |",
             "|---|---|---|---|---|---|---|",
         ]
-        for m in sorted(vuln_metrics, key=lambda x: -x.recall):
+        for m in sorted(ds_metrics, key=lambda x: -x.recall):
+            cmd = f"`python -m bench.harness --dataset {ds} --tool {m.tool}{seed_str}`"
             lines.append(
-                f"| `{m.tool}` | {m.dataset} | {m.recall:.0%} | {m.precision:.0%} | {m.f1:.2f} | {m.tp} | {m.fn} |"
+                f"| `{m.tool}` | {m.recall:.0%} | {m.precision:.0%} | {m.f1:.2f} | {m.tp} | {m.fn} | {cmd} |"
             )
         lines.append("")
 
     lines += [
         "## Methodology",
         "",
-        f"- **Clean corpus**: {len([m for m in report.metrics if m.dataset == 'clean_corpus' and m.n_clean > 0])} tool(s) × 200+ clean snippets across Python/JS/TS/Go/Rust/Java",
-        f"- **Vulnerability corpus**: {sum(m.n_vuln for m in report.metrics if m.n_vuln > 0 and m.dataset != 'clean_corpus')} manually-verified CVE/CWE samples",
-        "- **Reproducible**: pin dataset version, run `python -m bench.harness`, compare JSON in `bench/reports/`",
-        "- **Honest**: we include samples where Odin loses",
+        "- **Clean corpus**: 200+ clean snippets across Python/JS/TS/Go/Rust/Java — FP rate is the headline metric",
+        f"- **SecVulEval subset**: {sum(m.n_vuln for m in report.metrics if m.dataset == 'secvuleval-subset')} Python/JS CVE/CWE samples (language-equivalent, SecVulEval is C/C++)",
+        "- **SWE-bench Verified**: 50-sample bug-detection subset — logic errors, not just security issues",
+        "- **CVE-Bench**: 50 critical CVEs; SOTA is ~13% recall — low numbers expected and disclosed",
+        "- **Competitor notes**: CodeRabbit/Greptile/Qodo run snippet-only (no repo context) — their numbers are a floor",
+        "- **Reproducible**: every row has the exact command to regenerate it; dataset versions pinned by DATASET_VERSION",
+        "- **Honest**: we include all samples where Odin loses, including hard cases",
         "",
         "## Reproduce These Results",
         "",
         "```bash",
         "cd backend",
-        "python -m bench.harness",
+        f"{reproduce_cmd}",
         "```",
         "",
-        f"*Dataset version: `{report.odin_version}` · See `bench/datasets/` for all samples*",
+        "*Dataset versions: secvuleval-v1.0 · swebench-verified-v1 · cvebench-v1-crits-50 · See `bench/datasets/` for all samples*",
     ]
     return "\n".join(lines)
 
@@ -223,6 +261,7 @@ def _save_report(report: BenchmarkReport) -> Path:
         "timestamp": report.timestamp,
         "commit_sha": report.commit_sha,
         "odin_version": report.odin_version,
+        "seed": report.seed,
         "datasets": report.datasets,
         "tools": report.tools,
         "metrics": [
@@ -259,28 +298,48 @@ def _save_report(report: BenchmarkReport) -> Path:
 # ──────────────────────────────────────────────────────────────────────────────
 
 
+_ALL_DATASETS = ["clean_corpus", "secvuleval", "swebench", "cvebench"]
+
+
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Odin benchmark harness")
+    p = argparse.ArgumentParser(
+        description="Odin benchmark harness",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python -m bench.harness\n"
+            "  python -m bench.harness --dataset secvuleval --tool odin-rules --seed 42\n"
+            "  python -m bench.harness --dataset cvebench --json\n"
+        ),
+    )
     p.add_argument(
         "--dataset",
-        choices=["clean_corpus", "secvuleval", "all"],
+        choices=[*_ALL_DATASETS, "all"],
         default="all",
-        help="Which dataset(s) to run",
+        help="Which dataset(s) to run (default: all)",
     )
-    p.add_argument("--tool", help="Run only this tool (e.g. odin-rules, semgrep)")
+    p.add_argument("--tool", help="Run only this tool (e.g. odin-rules, semgrep, greptile)")
+    p.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="RNG seed for reproducible dataset shuffling (e.g. --seed 42)",
+    )
     p.add_argument("--json", action="store_true", help="Print JSON report to stdout")
     p.add_argument("--no-save", action="store_true", help="Don't save report to disk")
     args = p.parse_args(argv)
 
-    datasets = ["clean_corpus", "secvuleval"] if args.dataset == "all" else [args.dataset]
+    datasets = _ALL_DATASETS if args.dataset == "all" else [args.dataset]
 
-    print("\n🔬 Odin Benchmark Harness")
-    print(f"   Datasets: {', '.join(datasets)}")
+    print("\nOdin Benchmark Harness")
+    print(f"   Datasets : {', '.join(datasets)}")
     if args.tool:
-        print(f"   Tool filter: {args.tool}")
+        print(f"   Tool     : {args.tool}")
+    if args.seed is not None:
+        print(f"   Seed     : {args.seed}")
     print()
 
-    report = run_benchmark(datasets=datasets, filter_tool=args.tool)
+    report = run_benchmark(datasets=datasets, filter_tool=args.tool, seed=args.seed)
 
     if not report.metrics:
         print("No tools available. Install semgrep or run from within the odin backend.")

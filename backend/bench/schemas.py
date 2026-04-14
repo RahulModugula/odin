@@ -118,3 +118,4 @@ class BenchmarkReport:
     tools: list[str]
     metrics: list[DatasetMetrics]
     sample_results: list[SampleResult] = field(default_factory=list)
+    seed: int | None = None  # RNG seed for reproducible dataset shuffling
