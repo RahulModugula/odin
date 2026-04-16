@@ -42,7 +42,7 @@ def create_langfuse_handler(
         return None
 
     try:
-        from langfuse.callback import CallbackHandler
+        from langfuse.callback import CallbackHandler  # type: ignore[import-not-found]
 
         return CallbackHandler(
             public_key=settings.langfuse_public_key,

@@ -31,7 +31,7 @@ from typing import Any
 # --------------------------------------------------------------------------- #
 
 try:
-    from colorama import Fore, Style
+    from colorama import Fore, Style  # type: ignore[import-untyped]
     from colorama import init as _cinit
 
     _cinit()
@@ -77,6 +77,10 @@ def bold(t: str) -> str:
 
 def dim(t: str) -> str:
     return _c(t, _DIM)
+
+
+def _identity(t: str) -> str:
+    return t
 
 
 SEVERITY_COLOR = {
@@ -310,11 +314,11 @@ def print_findings(findings: list[dict]) -> int:  # type: ignore[type-arg]
     for f in sorted(findings, key=lambda x: SEVERITY_ORDER.index(x.get("severity", "info"))):
         sev = f.get("severity", "info")
         icon = SEVERITY_ICON.get(sev, "•")
-        col_fn = SEVERITY_COLOR.get(sev, lambda t: t)
+        col_fn = SEVERITY_COLOR.get(sev, _identity)
         src = dim(f"[{f.get('source', '?')}]")
         line = f"  line {f['line_start']}" if f.get("line_start") else ""
 
-        print(f"  {icon} {col_fn(sev.upper())} {src} {bold(f['title'])}{dim(line)}")  # type: ignore[no-untyped-call]
+        print(f"  {icon} {col_fn(sev.upper())} {src} {bold(f['title'])}{dim(line)}")
         desc = f.get("description", "")
         if desc:
             print(f"     {desc[:120]}")
@@ -500,15 +504,13 @@ def _run_fix(args: argparse.Namespace) -> None:
     for filepath_str, file_findings in by_file.items():
         filepath = Path(filepath_str)
         # Apply bottom-to-top: higher line numbers first so earlier offsets stay valid
-        sorted_findings = sorted(
-            file_findings, key=lambda f: f.get("line_start", 0), reverse=True
-        )
+        sorted_findings = sorted(file_findings, key=lambda f: f.get("line_start", 0), reverse=True)
         print(bold(filepath_str))
 
         for finding in sorted_findings:
             sev = finding.get("severity", "info")
             icon = SEVERITY_ICON.get(sev, "•")
-            col_fn = SEVERITY_COLOR.get(sev, lambda t: t)
+            col_fn = SEVERITY_COLOR.get(sev, _identity)
             print(f"  {icon} {col_fn(sev.upper())} {bold(finding['title'])}")
 
             line_start = int(finding["line_start"])
@@ -541,9 +543,7 @@ def _run_fix(args: argparse.Namespace) -> None:
                     print(f"  {dim('Skipped')}\n")
                     skipped += 1
 
-    print(
-        bold(f"\nDone: {applied} fix(es) applied, {skipped} skipped.")
-    )
+    print(bold(f"\nDone: {applied} fix(es) applied, {skipped} skipped."))
 
 
 # --------------------------------------------------------------------------- #
@@ -700,16 +700,8 @@ def _run_review(args: argparse.Namespace) -> None:
     cfg = load_config() if not getattr(args, "no_config", False) else None
 
     # Resolve effective settings: CLI flag > config > default
-    min_severity: str = (
-        args.min_severity
-        or (cfg.min_severity if cfg else None)
-        or "low"
-    )
-    fail_on: str = (
-        args.fail_on
-        or (cfg.fail_on if cfg else None)
-        or "high"
-    )
+    min_severity: str = args.min_severity or (cfg.min_severity if cfg else None) or "low"
+    fail_on: str = args.fail_on or (cfg.fail_on if cfg else None) or "high"
     min_confidence: float = (
         args.min_confidence
         if args.min_confidence is not None
@@ -783,8 +775,7 @@ def _run_review(args: argparse.Namespace) -> None:
         # Apply .odin.yml ignore rules
         if cfg and cfg.ignore:
             findings = [
-                f for f in findings
-                if not cfg.is_ignored(f.get("title", ""), str(filepath))
+                f for f in findings if not cfg.is_ignored(f.get("title", ""), str(filepath))
             ]
 
         findings = [
@@ -823,8 +814,8 @@ def _run_review(args: argparse.Namespace) -> None:
             print(bold(f"Summary: {len(all_findings)} finding(s) in {len(files)} file(s)"))
             for sev in SEVERITY_ORDER:
                 if counts.get(sev):
-                    col = SEVERITY_COLOR.get(sev, lambda t: t)
-                    print(f"  {col(sev)}: {counts[sev]}")  # type: ignore[no-untyped-call]
+                    col = SEVERITY_COLOR.get(sev, _identity)
+                    print(f"  {col(sev)}: {counts[sev]}")
 
         if args.json:
             print("\n" + json.dumps(all_findings, indent=2))
@@ -835,8 +826,7 @@ def _run_review(args: argparse.Namespace) -> None:
     # ---- exit code 1: blocking findings ----
     if fail_on != "never":
         blockers = [
-            f for f in all_findings
-            if SEVERITY_ORDER.index(f.get("severity", "info")) <= fail_idx
+            f for f in all_findings if SEVERITY_ORDER.index(f.get("severity", "info")) <= fail_idx
         ]
         if blockers:
             print(f"\n{red(f'✗ {len(blockers)} blocking finding(s) at {fail_on}+ severity')}")

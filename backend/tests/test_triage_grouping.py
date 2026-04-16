@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
-from app.dataflow.schemas import SinkKind, SourceKind, TaintCandidate, TriageVerdict
+from app.dataflow.schemas import SinkKind, SourceKind, TaintCandidate
 from app.dataflow.triage import triage_all
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -71,8 +71,7 @@ def _make_candidate(
 def test_grouping_reduces_llm_calls() -> None:
     """5 candidates with identical source/sink pattern → 1 LLM call."""
     candidates = [
-        _make_candidate(f"cand-{i}", source_sig="src-A", sink_sig="snk-B")
-        for i in range(5)
+        _make_candidate(f"cand-{i}", source_sig="src-A", sink_sig="snk-B") for i in range(5)
     ]
     llm = _make_llm(_verdict_json())
     verdicts = asyncio.get_event_loop().run_until_complete(triage_all(candidates, llm))
@@ -85,8 +84,7 @@ def test_grouping_reduces_llm_calls() -> None:
 def test_grouping_verdict_applied_to_all_siblings() -> None:
     """All 3 siblings must carry the representative's exploitable/confidence values."""
     candidates = [
-        _make_candidate(f"cand-{i}", source_sig="src-A", sink_sig="snk-B")
-        for i in range(3)
+        _make_candidate(f"cand-{i}", source_sig="src-A", sink_sig="snk-B") for i in range(3)
     ]
     llm = _make_llm(_verdict_json(exploitable=True, confidence=0.91))
     verdicts = asyncio.get_event_loop().run_until_complete(triage_all(candidates, llm))
@@ -97,8 +95,7 @@ def test_grouping_verdict_applied_to_all_siblings() -> None:
 def test_grouping_candidate_ids_preserved() -> None:
     """Each returned verdict must carry its own candidate_id, not the representative's."""
     candidates = [
-        _make_candidate(f"id-{i}", source_sig="src-A", sink_sig="snk-B")
-        for i in range(4)
+        _make_candidate(f"id-{i}", source_sig="src-A", sink_sig="snk-B") for i in range(4)
     ]
     llm = _make_llm(_verdict_json())
     verdicts = asyncio.get_event_loop().run_until_complete(triage_all(candidates, llm))
@@ -109,12 +106,8 @@ def test_grouping_candidate_ids_preserved() -> None:
 
 def test_distinct_groups_get_distinct_llm_calls() -> None:
     """3 candidates of pattern A + 2 of pattern B → exactly 2 LLM calls."""
-    group_a = [
-        _make_candidate(f"a-{i}", source_sig="src-A", sink_sig="snk-A") for i in range(3)
-    ]
-    group_b = [
-        _make_candidate(f"b-{i}", source_sig="src-B", sink_sig="snk-B") for i in range(2)
-    ]
+    group_a = [_make_candidate(f"a-{i}", source_sig="src-A", sink_sig="snk-A") for i in range(3)]
+    group_b = [_make_candidate(f"b-{i}", source_sig="src-B", sink_sig="snk-B") for i in range(2)]
     llm = _make_llm(_verdict_json())
     verdicts = asyncio.get_event_loop().run_until_complete(triage_all(group_a + group_b, llm))
     assert llm.ainvoke.call_count == 2
@@ -156,12 +149,11 @@ def test_grouping_preserves_original_order() -> None:
     """Returned verdicts must be in the same order as the input candidates."""
     # Interleave two patterns so order within a group is non-trivial
     candidates = [
-        _make_candidate(f"c-{i}", source_sig=f"src-{i % 2}", sink_sig="snk-X")
-        for i in range(6)
+        _make_candidate(f"c-{i}", source_sig=f"src-{i % 2}", sink_sig="snk-X") for i in range(6)
     ]
     llm = _make_llm(_verdict_json())
     verdicts = asyncio.get_event_loop().run_until_complete(triage_all(candidates, llm))
-    for i, (c, v) in enumerate(zip(candidates, verdicts)):
+    for i, (c, v) in enumerate(zip(candidates, verdicts, strict=False)):
         assert v.candidate_id == c.candidate_id, (
             f"Order mismatch at index {i}: expected {c.candidate_id}, got {v.candidate_id}"
         )

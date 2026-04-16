@@ -124,8 +124,7 @@ def _taint_description(candidate: TaintCandidate, verdict: TriageVerdict) -> str
         )
     else:
         lines.append(
-            f"User-controlled {source_label} (`{source_pat}`) "
-            f"flows directly to `{sink_pat}`."
+            f"User-controlled {source_label} (`{source_pat}`) flows directly to `{sink_pat}`."
         )
 
     # Taint chain as a numbered list
@@ -141,7 +140,10 @@ def _taint_description(candidate: TaintCandidate, verdict: TriageVerdict) -> str
         )
 
     # Attack scenario from LLM
-    if verdict.exploit_scenario and verdict.exploit_scenario != "Taint path detected — manual review recommended.":
+    if (
+        verdict.exploit_scenario
+        and verdict.exploit_scenario != "Taint path detected — manual review recommended."
+    ):
         lines.append("")
         lines.append(f"**Attack scenario:** {verdict.exploit_scenario}")
 
@@ -250,7 +252,7 @@ def synthesize(state: ReviewState) -> dict:  # type: ignore[type-arg]
 
     # Diff-aware: downgrade findings not near any changed line range.
     # Only fires on PR reviews where changed_lines is populated.
-    changed_lines: list[tuple[int, int]] = state.get("changed_lines", [])  # type: ignore[assignment]
+    changed_lines: list[tuple[int, int]] = state.get("changed_lines", [])
     if changed_lines:
         deduped = _tag_pre_existing(deduped, changed_lines)
 
