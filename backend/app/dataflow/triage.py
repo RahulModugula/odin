@@ -41,6 +41,7 @@ Source: {source_kind} via `{source_pattern}`
 Sink: {sink_kind} via `{sink_pattern}`
 CWE: {cwe}
 Taint chain depth: {hop_count} hop(s)
+Tainted variable(s): {tainted_vars}
 Function: {function_name}
 
 CODE CONTEXT (annotated — >> marks source/sink/propagation lines)
@@ -52,22 +53,30 @@ TASK
 Determine if this taint path is exploitable. Consider:
 1. Can an attacker control the SOURCE value?
 2. Does the tainted value reach the SINK without meaningful sanitization?
-3. What is the realistic exploit scenario?
-4. What is the appropriate sanitizer/fix?
+3. What is the realistic exploit scenario and concrete payload?
+4. What is the exact code fix?
 
 Respond with ONLY valid JSON in this exact schema:
 {{
   "exploitable": true | false,
   "confidence": 0.0-1.0,
   "exploit_scenario": "an attacker can ... to achieve ...",
-  "suggested_sanitizer": "use ... to sanitize",
+  "suggested_sanitizer": "brief description of the fix",
+  "fix_code": "the exact replacement code line(s) that fix the vulnerability",
   "reasoning": "step-by-step reasoning"
 }}
+
+For fix_code: write ONLY the replacement code (e.g. the fixed version of the sink call),
+not a prose explanation.
+Example: cursor.execute('SELECT * FROM users WHERE id = ?', (user_id,))
 """
 
 
 def _build_prompt(candidate: TaintCandidate) -> str:
     cwe = _SINK_CWE.get(candidate.sink.kind.value, "CWE-unknown")
+    # Collect unique variable names from the hop chain (source → ... → sink)
+    hop_vars = [h.variable for h in candidate.hops if h.variable]
+    tainted_vars = " → ".join(hop_vars) if hop_vars else "unknown"
     return _TRIAGE_PROMPT_TEMPLATE.format(
         language=candidate.language.value,
         source_kind=candidate.source.kind.value,
@@ -76,6 +85,7 @@ def _build_prompt(candidate: TaintCandidate) -> str:
         sink_pattern=candidate.sink.call_pattern,
         cwe=cwe,
         hop_count=len(candidate.hops),
+        tainted_vars=tainted_vars,
         function_name=candidate.function_name or "unknown",
         snippet=candidate.snippet,
     )
@@ -96,6 +106,7 @@ def _parse_verdict(candidate_id: str, raw: str) -> TriageVerdict | None:
             confidence=min(1.0, max(0.0, float(data.get("confidence", 0.5)))),
             exploit_scenario=str(data.get("exploit_scenario", "")),
             suggested_sanitizer=str(data.get("suggested_sanitizer", "")),
+            fix_code=str(data.get("fix_code", "")),
             reasoning=str(data.get("reasoning", "")),
         )
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
@@ -122,6 +133,7 @@ async def triage_candidate(candidate: TaintCandidate, llm: Any) -> TriageVerdict
         confidence=0.4,
         exploit_scenario="Taint path detected — manual review recommended.",
         suggested_sanitizer="Validate and sanitize all user-controlled input.",
+        fix_code="",
         reasoning="LLM triage unavailable; conservative verdict applied.",
     )
 
@@ -191,15 +203,17 @@ async def triage_all(
     return [
         TriageVerdict(
             candidate_id=c.candidate_id,
-            exploitable=rep_verdicts[(c.source.signature, c.sink.signature)].exploitable,
-            confidence=rep_verdicts[(c.source.signature, c.sink.signature)].confidence,
-            exploit_scenario=rep_verdicts[
-                (c.source.signature, c.sink.signature)
-            ].exploit_scenario,
-            suggested_sanitizer=rep_verdicts[
-                (c.source.signature, c.sink.signature)
-            ].suggested_sanitizer,
-            reasoning=rep_verdicts[(c.source.signature, c.sink.signature)].reasoning,
+            **{
+                k: getattr(rep_verdicts[(c.source.signature, c.sink.signature)], k)
+                for k in (
+                    "exploitable",
+                    "confidence",
+                    "exploit_scenario",
+                    "suggested_sanitizer",
+                    "fix_code",
+                    "reasoning",
+                )
+            },
         )
         for c in candidates
     ]

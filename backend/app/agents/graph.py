@@ -1,8 +1,15 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import structlog
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
 from app.agents.docs_agent import run_docs_agent
+
+if TYPE_CHECKING:
+    from app.dataflow.schemas import TaintCandidate, TriageVerdict
 from app.agents.quality_agent import run_quality_agent
 from app.agents.security_agent import run_security_agent
 from app.config import settings
@@ -12,6 +19,134 @@ from app.models.state import ReviewState
 from app.parsers.tree_sitter_parser import parse_code
 
 logger = structlog.get_logger()
+
+# ── Dataflow finding helpers ──────────────────────────────────────────────────
+
+# Human-readable vulnerability name per sink kind
+_VULN_NAME: dict[str, str] = {
+    "code_exec": "Code injection",
+    "shell_exec": "Command injection",
+    "sql_query": "SQL injection",
+    "dom_write": "Cross-site scripting (XSS)",
+    "path_traversal": "Path traversal",
+    "ssrf_fetch": "Server-side request forgery (SSRF)",
+    "template_render": "Server-side template injection (SSTI)",
+    "deserialized": "Unsafe deserialization",
+}
+
+# Source kind label used in finding description
+_SOURCE_LABEL: dict[str, str] = {
+    "http_param": "HTTP query parameter",
+    "http_body": "HTTP request body",
+    "env_var": "environment variable",
+    "file_read": "file read",
+    "argv": "command-line argument",
+    "deserialized": "deserialized input",
+    "network": "network input",
+    "db_read": "database value",
+    "user_input": "user input",
+}
+
+# Risk matrix: (source_kind, sink_kind) → Severity
+# Overrides the confidence-only approach for well-understood combinations.
+_RISK_MATRIX: dict[tuple[str, str], Severity] = {}  # populated after Severity is imported
+
+
+def _taint_severity(source_kind: str, sink_kind: str, confidence: float) -> Severity:
+    """Derive severity from source+sink combination, falling back to confidence."""
+    # Lazily populate the risk matrix on first call (Severity not imported at module load)
+    if not _RISK_MATRIX:
+        _RISK_MATRIX.update(
+            {
+                # Direct HTTP input → execution = always CRITICAL
+                ("http_param", "code_exec"): Severity.CRITICAL,
+                ("http_body", "code_exec"): Severity.CRITICAL,
+                ("http_param", "shell_exec"): Severity.CRITICAL,
+                ("http_body", "shell_exec"): Severity.CRITICAL,
+                ("http_param", "template_render"): Severity.CRITICAL,
+                ("http_body", "template_render"): Severity.CRITICAL,
+                ("user_input", "code_exec"): Severity.CRITICAL,
+                ("user_input", "shell_exec"): Severity.CRITICAL,
+                # HTTP input → data exfil / traversal = HIGH
+                ("http_param", "sql_query"): Severity.HIGH,
+                ("http_body", "sql_query"): Severity.HIGH,
+                ("http_param", "path_traversal"): Severity.HIGH,
+                ("http_body", "path_traversal"): Severity.HIGH,
+                ("http_param", "ssrf_fetch"): Severity.HIGH,
+                ("http_body", "ssrf_fetch"): Severity.HIGH,
+                ("http_param", "dom_write"): Severity.HIGH,
+                ("http_body", "dom_write"): Severity.HIGH,
+                ("http_param", "deserialized"): Severity.HIGH,
+                ("http_body", "deserialized"): Severity.CRITICAL,
+                # Deserialized input → code execution = CRITICAL
+                ("deserialized", "code_exec"): Severity.CRITICAL,
+                ("deserialized", "shell_exec"): Severity.CRITICAL,
+                # Env vars are usually not directly attacker-controlled at runtime
+                ("env_var", "sql_query"): Severity.MEDIUM,
+                ("env_var", "shell_exec"): Severity.HIGH,
+                ("env_var", "code_exec"): Severity.HIGH,
+                # Second-order injection from DB reads
+                ("db_read", "sql_query"): Severity.HIGH,
+                ("db_read", "shell_exec"): Severity.HIGH,
+            }
+        )
+    sev = _RISK_MATRIX.get((source_kind, sink_kind))
+    if sev is not None:
+        return sev
+    # Fallback: use confidence threshold
+    return Severity.CRITICAL if confidence >= 0.85 else Severity.HIGH
+
+
+def _taint_title(candidate: TaintCandidate) -> str:
+    """Generate a human-readable finding title, e.g. 'SQL injection via `username`'."""
+    vuln = _VULN_NAME.get(candidate.sink.kind.value, "Taint vulnerability")
+    # Pull the first variable name from the taint chain
+    var_name = candidate.hops[0].variable if candidate.hops else None
+    if var_name:
+        return f"{vuln} via `{var_name}`"
+    return vuln
+
+
+def _taint_description(candidate: TaintCandidate, verdict: TriageVerdict) -> str:
+    """Build a developer-facing description with the full propagation chain."""
+    source_label = _SOURCE_LABEL.get(candidate.source.kind.value, candidate.source.kind.value)
+    source_pat = candidate.source.call_pattern or candidate.source.attr_pattern or "unknown"
+    sink_pat = candidate.sink.call_pattern
+
+    lines: list[str] = []
+
+    # Lead sentence
+    if candidate.hops:
+        first_var = candidate.hops[0].variable
+        lines.append(
+            f"`{first_var}` comes from a {source_label} (`{source_pat}`) "
+            f"and reaches `{sink_pat}` without sanitization."
+        )
+    else:
+        lines.append(
+            f"User-controlled {source_label} (`{source_pat}`) "
+            f"flows directly to `{sink_pat}`."
+        )
+
+    # Taint chain as a numbered list
+    if candidate.hops:
+        lines.append("")
+        lines.append("**Taint chain:**")
+        for i, hop in enumerate(candidate.hops, 1):
+            marker = "← source" if i == 1 else ""
+            lines.append(f"  {i}. line {hop.line}: `{hop.variable}` {marker}")
+        lines.append(
+            f"  {len(candidate.hops) + 1}. line {candidate.sink_location[0]}: "
+            f"`{sink_pat}` ← **sink** ⚠"
+        )
+
+    # Attack scenario from LLM
+    if verdict.exploit_scenario and verdict.exploit_scenario != "Taint path detected — manual review recommended.":
+        lines.append("")
+        lines.append(f"**Attack scenario:** {verdict.exploit_scenario}")
+
+    return "\n".join(lines)
+
 
 SEVERITY_PENALTY = {
     Severity.CRITICAL: 20,
@@ -304,20 +439,19 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
                 continue
             findings.append(
                 Finding(
-                    severity=Severity.CRITICAL if verdict.confidence >= 0.85 else Severity.HIGH,
-                    category=Category.SECURITY,
-                    title=f"Taint flow: {candidate.source.kind.value} → {candidate.sink.kind.value}",
-                    description=(
-                        f"Dataflow analysis detected a tainted path from "
-                        f"`{candidate.source.call_pattern or candidate.source.attr_pattern}` "
-                        f"to `{candidate.sink.call_pattern}` (lines "
-                        f"{candidate.source_location[0]}→{candidate.sink_location[0]}). "
-                        f"{verdict.exploit_scenario}"
+                    severity=_taint_severity(
+                        candidate.source.kind.value,
+                        candidate.sink.kind.value,
+                        verdict.confidence,
                     ),
-                    line_start=candidate.sink_location[0],
+                    category=Category.SECURITY,
+                    title=_taint_title(candidate),
+                    description=_taint_description(candidate, verdict),
+                    # Span the full taint range: source line → sink line
+                    line_start=candidate.source_location[0],
                     line_end=candidate.sink_location[0],
                     suggestion=verdict.suggested_sanitizer,
-                    fix_code=verdict.suggested_sanitizer or None,
+                    fix_code=verdict.fix_code or None,
                     attack_scenario=verdict.exploit_scenario,
                     confidence=verdict.confidence,
                     source="dataflow",

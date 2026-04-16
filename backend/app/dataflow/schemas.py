@@ -113,5 +113,6 @@ class TriageVerdict:
     exploitable: bool
     confidence: float  # 0.0–1.0
     exploit_scenario: str  # "an attacker can ... to achieve ..."
-    suggested_sanitizer: str
+    suggested_sanitizer: str  # prose explanation
+    fix_code: str  # drop-in code fix (may be empty if LLM didn't produce one)
     reasoning: str
