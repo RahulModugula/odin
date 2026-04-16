@@ -14,8 +14,6 @@ logger = structlog.get_logger()
 
 
 class QualityFinding(BaseModel):
-    """A single code quality finding."""
-
     severity: Severity
     title: str
     description: str
@@ -27,8 +25,6 @@ class QualityFinding(BaseModel):
 
 
 class QualityReviewOutput(BaseModel):
-    """Structured output from the quality review agent."""
-
     findings: list[QualityFinding] = []
 
 
@@ -41,11 +37,28 @@ async def run_quality_agent(
     try:
         structured_llm = get_llm().with_structured_output(QualityReviewOutput, method="json_mode")
 
+        codebase_context = state.get("codebase_context", "")
+
+        try:
+            from app.agents.tools import REVIEW_TOOLS
+
+            tool_context_parts: list[str] = []
+            for tool_fn in REVIEW_TOOLS:
+                if hasattr(tool_fn, "name") and hasattr(tool_fn, "description"):
+                    tool_context_parts.append(f"- {tool_fn.name}: {tool_fn.description}")
+            if tool_context_parts:
+                codebase_context += (
+                    "\n\n**Available retrieval tools** (ask for more context if needed):\n"
+                    + "\n".join(tool_context_parts)
+                )
+        except Exception:
+            pass
+
         prompt = build_review_prompt(
             state["code"],
             state["language"],
             state["ast_summary"],
-            state.get("codebase_context", ""),
+            codebase_context,
             diff=state.get("diff", ""),
             changed_lines=state.get("changed_lines"),
             pr_context=state.get("pr_context"),

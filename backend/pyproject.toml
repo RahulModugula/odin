@@ -26,6 +26,7 @@ dependencies = [
     "langfuse>=4.0.0",
     "neo4j>=5.0.0",
     "mcp>=1.0.0",
+    "chromadb>=0.4.0",
 ]
 
 [project.scripts]
@@ -73,6 +74,7 @@ exclude = ["tests/fixtures/*"]
 "app/dataflow/registry.py" = ["E501"]
 "app/dataflow/tracker.py" = ["E501"]
 "app/agents/graph.py" = ["E501"]
+"app/graph_rag/extractor.py" = ["E501"]
 "bench/datasets/*.py" = ["E501"]
 "bench/harness.py" = ["E501"]
 "eval/runner.py" = ["E501", "F401", "F541"]

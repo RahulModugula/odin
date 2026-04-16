@@ -14,22 +14,18 @@ logger = structlog.get_logger()
 
 
 class SecurityFinding(BaseModel):
-    """A single security finding with attack scenario and fix."""
-
     severity: Severity
     title: str
     description: str
     line_start: int | None = None
     line_end: int | None = None
     suggestion: str | None = None
-    fix_code: str | None = None  # drop-in replacement code
-    attack_scenario: str | None = None  # concrete exploitation path
+    fix_code: str | None = None
+    attack_scenario: str | None = None
     confidence: float = Field(ge=0.0, le=1.0, default=0.85)
 
 
 class SecurityReviewOutput(BaseModel):
-    """Structured output from the security review agent."""
-
     findings: list[SecurityFinding] = []
 
 
@@ -42,11 +38,28 @@ async def run_security_agent(
     try:
         structured_llm = get_llm().with_structured_output(SecurityReviewOutput, method="json_mode")
 
+        codebase_context = state.get("codebase_context", "")
+
+        try:
+            from app.agents.tools import REVIEW_TOOLS
+
+            tool_context_parts: list[str] = []
+            for tool_fn in REVIEW_TOOLS:
+                if hasattr(tool_fn, "name") and hasattr(tool_fn, "description"):
+                    tool_context_parts.append(f"- {tool_fn.name}: {tool_fn.description}")
+            if tool_context_parts:
+                codebase_context += (
+                    "\n\n**Available retrieval tools** (ask for more context if needed):\n"
+                    + "\n".join(tool_context_parts)
+                )
+        except Exception:
+            pass
+
         prompt = build_review_prompt(
             state["code"],
             state["language"],
             state["ast_summary"],
-            state.get("codebase_context", ""),
+            codebase_context,
             diff=state.get("diff", ""),
             changed_lines=state.get("changed_lines"),
             pr_context=state.get("pr_context"),

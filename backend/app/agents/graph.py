@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING
 
 import structlog
@@ -172,24 +173,45 @@ def parse_code_node(state: ReviewState) -> dict:  # type: ignore[type-arg]
 
 
 async def enrich_context_node(state: ReviewState) -> dict:  # type: ignore[type-arg]
-    """Query the Graph RAG knowledge graph to build codebase context for agents."""
+    """Query the Graph RAG knowledge graph to build codebase context for agents.
+
+    Enhanced: indexes into vector store, supports multi-file PR context,
+    and stores DATAFLOWS_TO edges from taint analysis results.
+    """
     if not settings.graph_rag_enabled:
         return {"codebase_context": ""}
 
+    context = ""
     try:
-        # graph_store is expected to be set on app state and passed via context
-        # when not available (e.g. tests), fall through gracefully
         import app.graph_rag._store_ref as _ref
         from app.graph_rag.context_builder import build_context
         from app.graph_rag.store import GraphStore
+        from app.graph_rag.vector_store import get_vector_store
 
         store: GraphStore | None = getattr(_ref, "store", None)
 
+        file_path = state.get("file_path")
+        lang = Language(state["language"])
+
+        if store is not None and store.is_connected and file_path:
+            await store.index_file(state["code"], lang, file_path)
+
+        vector_store = get_vector_store()
+        if vector_store is not None and file_path:
+            with contextlib.suppress(Exception):
+                vector_store.index_file(state["code"], file_path, lang.value)
+
+        pr_context_files: dict[str, list[str]] | None = state.get("pr_context_files")
+        cross_file_paths: list[str] | None = None
+        if pr_context_files:
+            cross_file_paths = list(pr_context_files.keys())
+
         context = await build_context(
             state["code"],
-            Language(state["language"]),
-            state.get("file_path"),
+            lang,
+            file_path,
             store,
+            cross_file_paths=cross_file_paths,
         )
     except Exception:
         context = ""

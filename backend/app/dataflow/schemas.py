@@ -116,3 +116,4 @@ class TriageVerdict:
     suggested_sanitizer: str  # prose explanation
     fix_code: str  # drop-in code fix (may be empty if LLM didn't produce one)
     reasoning: str
+    needs_more_context: bool = False  # CRAG: triage wants callee context
