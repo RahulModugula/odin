@@ -75,6 +75,8 @@ class RuleEngine:
         except Exception:
             structure = None
 
+        # Per-rule dedup: ensure each rule only contributes one finding per line.
+        per_rule_seen: dict[tuple[str, int | None], bool] = {}
         for rule in self._rules:
             if rule.id in disabled:
                 continue
@@ -86,12 +88,15 @@ class RuleEngine:
                     # Stamp source so consumers can distinguish rule vs AI findings
                     if f.source is None:
                         f.source = "rule"
-                raw_findings.extend(rule_findings)
+                    rule_line_key = (rule.id, f.line_start)
+                    if rule_line_key not in per_rule_seen:
+                        per_rule_seen[rule_line_key] = True
+                        raw_findings.append(f)
             except Exception:
                 pass
 
-        # Deduplicate: same (line, category) keeps highest confidence finding.
-        # This handles overlapping rules like PY004 + CL004 both flagging the same
+        # Cross-rule dedup: same (line, category) keeps highest-confidence finding.
+        # Handles overlapping rules like PY004 + CL004 both flagging the same
         # hardcoded-secret line — we surface the more confident result once.
         seen: dict[tuple[int | None, str], Finding] = {}
         for f in raw_findings:

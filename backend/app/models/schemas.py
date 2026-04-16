@@ -1,4 +1,5 @@
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -58,7 +59,7 @@ class Finding(BaseModel):
     fix_code: str | None = None  # concrete code fix (posted as GitHub suggestion block)
     attack_scenario: str | None = None  # "an attacker can... to achieve..."
     confidence: float = Field(ge=0.0, le=1.0, default=0.8)
-    source: str | None = None  # "rule" | "ai"
+    source: Literal["rule", "ai", "dataflow"] | None = None
 
 
 class AgentOutput(BaseModel):
