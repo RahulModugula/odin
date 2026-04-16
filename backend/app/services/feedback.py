@@ -3,6 +3,7 @@
 import hashlib
 import json
 from datetime import UTC, datetime
+from typing import Any
 
 import structlog
 from redis.asyncio import Redis
@@ -61,11 +62,11 @@ class FeedbackService:
             "ts": datetime.now(UTC).isoformat(),
         }
 
-        await self.redis.lpush(key, json.dumps(entry))
-        await self.redis.ltrim(key, 0, 99)  # keep last 100
+        await self.redis.lpush(key, json.dumps(entry))  # type: ignore[misc]
+        await self.redis.ltrim(key, 0, 99)  # type: ignore[misc]  # keep last 100
 
         # If marked as false positive N+ times, add to suppressions
-        all_entries = await self.redis.lrange(key, 0, -1)
+        all_entries = await self.redis.lrange(key, 0, -1)  # type: ignore[misc]
         fp_count = sum(1 for e in all_entries if json.loads(e).get("action") == "false_positive")
         if fp_count >= settings.feedback_general_threshold:
             ttl = 86400 * settings.feedback_suppression_ttl_days
@@ -91,10 +92,10 @@ class FeedbackService:
             "language": language,
             "ts": datetime.now(UTC).isoformat(),
         }
-        await self.redis.lpush(key, json.dumps(entry))
-        await self.redis.ltrim(key, 0, 49)
+        await self.redis.lpush(key, json.dumps(entry))  # type: ignore[misc]
+        await self.redis.ltrim(key, 0, 49)  # type: ignore[misc]
 
-        all_entries = await self.redis.lrange(key, 0, -1)
+        all_entries = await self.redis.lrange(key, 0, -1)  # type: ignore[misc]
         if len(all_entries) >= settings.feedback_taint_threshold:
             suppress_key = self._taint_pair_key(source_sig, sink_sig)
             ttl = 86400 * settings.feedback_suppression_ttl_days
@@ -109,12 +110,13 @@ class FeedbackService:
     async def is_taint_pair_suppressed(self, source_sig: str, sink_sig: str) -> bool:
         """Return True if this source→sink pair is suppressed."""
         key = self._taint_pair_key(source_sig, sink_sig)
-        return await self.redis.exists(key) > 0
+        count: int = await self.redis.exists(key)
+        return count > 0
 
     async def filter_taint_candidates(
         self,
-        candidates: list,  # list[TaintCandidate] — avoid circular import
-    ) -> list:
+        candidates: list[Any],  # list[TaintCandidate] — avoid circular import
+    ) -> list[Any]:
         """Remove suppressed source→sink pairs from the candidate list.
 
         Called inside the dataflow node, before the LLM triage stage.
@@ -166,4 +168,5 @@ class FeedbackService:
 
     async def is_suppressed(self, category: str, title: str, language: str) -> bool:
         fp = self._finding_fingerprint(category, title[:50], language)
-        return await self.redis.exists(f"{self._suppression_prefix}{fp}") > 0
+        count: int = await self.redis.exists(f"{self._suppression_prefix}{fp}")
+        return count > 0

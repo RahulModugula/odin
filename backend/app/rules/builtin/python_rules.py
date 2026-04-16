@@ -252,8 +252,8 @@ class ComplexityThresholdRule(Rule):
         structure: object = None,
     ) -> list[Finding]:
         findings: list[Finding] = []
-        if structure is not None and structure.metrics.cyclomatic_complexity > 10:  # type: ignore[union-attr]
-            cc = structure.metrics.cyclomatic_complexity  # type: ignore[union-attr]
+        if structure is not None and structure.metrics.cyclomatic_complexity > 10:  # type: ignore[attr-defined]
+            cc = structure.metrics.cyclomatic_complexity  # type: ignore[attr-defined]
             findings.append(
                 Finding(
                     severity=Severity.HIGH if cc > 20 else self.severity,
@@ -290,7 +290,7 @@ class FunctionLengthRule(Rule):
         findings: list[Finding] = []
         if structure is None:
             return findings
-        for func in structure.functions:  # type: ignore[union-attr]
+        for func in structure.functions:  # type: ignore[attr-defined]
             if func.body_length > 50:
                 findings.append(
                     Finding(
@@ -329,8 +329,8 @@ class NestingDepthRule(Rule):
         structure: object = None,
     ) -> list[Finding]:
         findings: list[Finding] = []
-        if structure is not None and structure.metrics.max_nesting_depth > 6:  # type: ignore[union-attr]
-            depth = structure.metrics.max_nesting_depth  # type: ignore[union-attr]
+        if structure is not None and structure.metrics.max_nesting_depth > 6:  # type: ignore[attr-defined]
+            depth = structure.metrics.max_nesting_depth  # type: ignore[attr-defined]
             findings.append(
                 Finding(
                     severity=Severity.HIGH if depth > 8 else self.severity,

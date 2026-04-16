@@ -174,7 +174,7 @@ async def create_review(request: ReviewRequest) -> JSONResponse:
         metadata={"language": request.language.value},
     )
     callbacks = [handler] if handler is not None else []
-    result: dict[str, Any] = await review_graph.ainvoke(
+    result: dict[str, Any] = await review_graph.ainvoke(  # type: ignore[call-overload]
         initial_state, config={"callbacks": callbacks}
     )
     elapsed_ms = (time.perf_counter() - start) * 1000
@@ -270,7 +270,7 @@ async def stream_review(request: ReviewRequest) -> StreamingResponse:
                 yield f"data: {sse_data}\n\n"
 
             elif kind == "on_chain_end" and name == "synthesize":
-                output = event.get("data", {}).get("output", {})
+                output: dict[str, Any] = event.get("data", {}).get("output", {})  # type: ignore[no-redef]
                 elapsed_ms = (time.perf_counter() - start) * 1000
 
                 complete_data = {
@@ -343,7 +343,7 @@ async def index_file(request: IndexRequest) -> dict[str, object]:
 # ── Review history endpoints ─────────────────────────────────────────────────
 
 
-def _get_review_store(req: Request):  # type: ignore[return]
+def _get_review_store(req: Request) -> Any:
     """Get ReviewStore from app state if Redis is available."""
     redis = getattr(req.app.state, "redis", None)
     if redis is None:
@@ -375,7 +375,7 @@ async def get_review(
     data = await store.get(review_id)
     if data is None:
         raise HTTPException(status_code=404, detail=f"Review '{review_id}' not found")
-    return data  # type: ignore[return-value]
+    return data  # type: ignore[no-any-return]
 
 
 # ── Feedback endpoint ────────────────────────────────────────────────────────
@@ -413,7 +413,7 @@ async def submit_feedback(
 
 
 @router.get("/feedback/stats")
-async def feedback_stats(req: Request = None) -> dict:  # type: ignore[assignment]
+async def feedback_stats(req: Request = None) -> dict[str, Any]:  # type: ignore[assignment]
     """Return FP rate and suppression stats over time per team."""
     redis = getattr(req.app.state, "redis", None) if req else None
     if redis is None:

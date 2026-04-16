@@ -80,7 +80,7 @@ def fan_out_to_agents(state: ReviewState) -> list[Send]:
     """Fan out to all four branches in parallel:
     security/quality/docs agents + deterministic rules + dataflow triage.
     """
-    agent_input: dict = {
+    agent_input: dict[str, object] = {
         "code": state["code"],
         "language": state["language"],
         "ast_summary": state["ast_summary"],
@@ -171,7 +171,7 @@ def _generate_summary(findings: list[Finding], score: int) -> str:
     if not findings:
         return "No issues found. Code looks clean and well-structured."
 
-    severity_counts = {}
+    severity_counts: dict[Severity, int] = {}
     for f in findings:
         severity_counts[f.severity] = severity_counts.get(f.severity, 0) + 1
 
@@ -265,7 +265,7 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
             inter_tracker = InterProceduralTaintTracker(
                 source_registry, sink_registry, sanitizer_registry, lang
             )
-            inter_candidates = inter_tracker.analyze({file_path: state["code"]})
+            inter_candidates = inter_tracker.analyze({file_path or "unknown.py": state["code"]})
             # Merge, deduplicating by candidate_id
             seen_ids = {c.candidate_id for c in candidates}
             for ic in inter_candidates:
@@ -331,9 +331,9 @@ builder = StateGraph(ReviewState)
 
 builder.add_node("parse_code", parse_code_node)
 builder.add_node("enrich_context", enrich_context_node)
-builder.add_node("quality_agent", run_quality_agent)
-builder.add_node("security_agent", run_security_agent)
-builder.add_node("docs_agent", run_docs_agent)
+builder.add_node("quality_agent", run_quality_agent)  # type: ignore[type-var]
+builder.add_node("security_agent", run_security_agent)  # type: ignore[type-var]
+builder.add_node("docs_agent", run_docs_agent)  # type: ignore[type-var]
 builder.add_node("run_rules", run_rules_node)
 builder.add_node("dataflow_triage", dataflow_triage_node)
 builder.add_node("synthesize", synthesize)

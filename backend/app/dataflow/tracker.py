@@ -174,7 +174,7 @@ class IntraProceduralTaintTracker:
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _extract_lhs(self, line: str, pattern: re.Pattern) -> str | None:
+    def _extract_lhs(self, line: str, pattern: re.Pattern[str]) -> str | None:
         """Extract the LHS variable name from an assignment line."""
         stripped = line.strip()
         m = pattern.match(stripped)

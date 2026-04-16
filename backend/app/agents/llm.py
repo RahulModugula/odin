@@ -17,7 +17,7 @@ def get_llm(provider: str | None = None) -> ChatOpenAI:
             api_key="lm-studio",  # type: ignore[arg-type]
             base_url=settings.lmstudio_base_url,
             temperature=0,
-            max_tokens=4096,
+            max_tokens=4096,  # type: ignore[call-arg]
         )
 
     if active == "openrouter":
@@ -26,7 +26,7 @@ def get_llm(provider: str | None = None) -> ChatOpenAI:
             api_key=settings.openrouter_api_key or "...",  # type: ignore[arg-type]
             base_url=settings.openrouter_base_url,
             temperature=0,
-            max_tokens=4096,
+            max_tokens=4096,  # type: ignore[call-arg]
             default_headers={
                 "HTTP-Referer": "https://github.com/odin-review/odin",
                 "X-Title": "Odin Code Review",
@@ -39,7 +39,7 @@ def get_llm(provider: str | None = None) -> ChatOpenAI:
             api_key="ollama",  # type: ignore[arg-type]
             base_url=settings.ollama_base_url,
             temperature=0,
-            max_tokens=4096,
+            max_tokens=4096,  # type: ignore[call-arg]
         )
 
     # default / openai / custom
@@ -48,7 +48,7 @@ def get_llm(provider: str | None = None) -> ChatOpenAI:
         api_key=settings.llm_api_key or settings.anthropic_api_key,  # type: ignore[arg-type]
         base_url=settings.llm_base_url or None,
         temperature=0,
-        max_tokens=4096,
+        max_tokens=4096,  # type: ignore[call-arg]
     )
 
 

@@ -2,6 +2,7 @@
 
 import hashlib
 import hmac
+from typing import Any
 
 import structlog
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
@@ -41,8 +42,8 @@ class _WebhookPayload(BaseModel):
 
 class _IssueCommentPayload(BaseModel):
     action: str
-    issue: dict
-    comment: dict
+    issue: dict[str, Any]
+    comment: dict[str, Any]
     repository: _Repository
 
 

@@ -8,7 +8,7 @@ from app.models.enums import Language as LangEnum
 
 # TypeScript and Go are optional; fall back gracefully if not installed.
 try:
-    import tree_sitter_typescript  # type: ignore[import-untyped]
+    import tree_sitter_typescript
 
     _ts_language = Language(tree_sitter_typescript.language_typescript())
     _tsx_language = Language(tree_sitter_typescript.language_tsx())
@@ -17,7 +17,7 @@ except Exception:
     _tsx_language = None  # type: ignore[assignment]
 
 try:
-    import tree_sitter_go  # type: ignore[import-untyped]
+    import tree_sitter_go
 
     _go_language = Language(tree_sitter_go.language())
 except Exception:

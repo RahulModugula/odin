@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import stat
 import subprocess
 import sys
@@ -81,7 +82,7 @@ jobs:
 """
 
 
-def run_init(args=None) -> None:
+def run_init(args: argparse.Namespace | None = None) -> None:
     """Set up Odin in the current repository."""
     project_root = _find_git_root()
     if project_root is None:

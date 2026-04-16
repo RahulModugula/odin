@@ -15,7 +15,7 @@ def configure_logging(log_level: str = "INFO") -> None:
         context_class=dict,
         logger_factory=structlog.PrintLoggerFactory(),
         wrapper_class=structlog.make_filtering_bound_logger(
-            structlog.get_level_from_name(log_level)
+            structlog.get_level_from_name(log_level)  # type: ignore[operator]
         ),
         cache_logger_on_first_use=True,
     )

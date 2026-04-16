@@ -1,5 +1,5 @@
 import operator
-from typing import Annotated, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
 from app.models.schemas import AgentOutput, CodeMetrics, Finding
 
@@ -18,7 +18,7 @@ class ReviewState(TypedDict):
     # PR-context fields (optional — not set when using the direct /review API)
     diff: NotRequired[str]
     changed_lines: NotRequired[list[tuple[int, int]]]
-    pr_context: NotRequired[dict]
+    pr_context: NotRequired[dict[str, Any]]
 
 
 class AgentInput(TypedDict):
@@ -29,4 +29,4 @@ class AgentInput(TypedDict):
     codebase_context: str
     diff: NotRequired[str]  # unified diff patch — agents focus on changed lines
     changed_lines: NotRequired[list[tuple[int, int]]]  # [(start, end), ...]
-    pr_context: NotRequired[dict]  # PR title, description, author
+    pr_context: NotRequired[dict[str, Any]]  # PR title, description, author

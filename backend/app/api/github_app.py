@@ -62,7 +62,7 @@ def _make_jwt(app_id: str, private_key_pem: str) -> str:
     try:
         import jwt  # PyJWT
 
-        return jwt.encode(payload, pem, algorithm="RS256")  # type: ignore[no-any-return]
+        return jwt.encode(payload, pem, algorithm="RS256")
     except ImportError:
         pass
 
@@ -80,7 +80,7 @@ def _make_jwt(app_id: str, private_key_pem: str) -> str:
     message = f"{header}.{body}".encode()
 
     private_key = serialization.load_pem_private_key(pem.encode(), password=None)
-    signature = private_key.sign(message, padding.PKCS1v15(), hashes.SHA256())  # type: ignore[call-arg]
+    signature = private_key.sign(message, padding.PKCS1v15(), hashes.SHA256())  # type: ignore[union-attr, arg-type, call-arg]
     return f"{header}.{body}.{_b64url(signature)}"
 
 

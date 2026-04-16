@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Any
+
 QUALITY_SYSTEM_PROMPT = """You are an expert code quality reviewer conducting a pull request review.
 
 You will receive:
@@ -119,7 +123,7 @@ def build_review_prompt(
     codebase_context: str = "",
     diff: str = "",
     changed_lines: list[tuple[int, int]] | None = None,
-    pr_context: dict | None = None,
+    pr_context: dict[str, Any] | None = None,
 ) -> str:
     sections: list[str] = []
 

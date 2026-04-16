@@ -40,7 +40,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         from redis.asyncio import Redis
 
         redis: Redis = Redis.from_url(settings.redis_url, decode_responses=False)
-        await redis.ping()
+        await redis.ping()  # type: ignore[misc]
         app.state.redis = redis
         logger.info("redis connected", url=settings.redis_url)
 
@@ -120,7 +120,7 @@ app.include_router(webhook_router, prefix="/api")
 app.include_router(github_app_router, prefix="/api/github")
 
 # Expose Prometheus metrics
-app.add_route("/metrics", metrics_endpoint)  # type: ignore[arg-type]
+app.add_route("/metrics", metrics_endpoint)
 
 if settings.mcp_enabled:
     try:

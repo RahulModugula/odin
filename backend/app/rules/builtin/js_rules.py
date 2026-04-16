@@ -195,8 +195,8 @@ class CallbackNestingRule(Rule):
         structure: object = None,
     ) -> list[Finding]:
         findings: list[Finding] = []
-        if structure is not None and structure.metrics.max_nesting_depth > 5:  # type: ignore[union-attr]
-            depth = structure.metrics.max_nesting_depth  # type: ignore[union-attr]
+        if structure is not None and structure.metrics.max_nesting_depth > 5:  # type: ignore[attr-defined]
+            depth = structure.metrics.max_nesting_depth  # type: ignore[attr-defined]
             findings.append(
                 Finding(
                     severity=self.severity,

@@ -129,7 +129,7 @@ async def _review_single_file(
             "changed_lines": changed_lines or [],
             "pr_context": {},
         }
-        result: dict[str, Any] = await review_graph.ainvoke(state, config={"callbacks": []})
+        result: dict[str, Any] = await review_graph.ainvoke(state, config={"callbacks": []})  # type: ignore[call-overload]
 
         return ReviewResult(
             metrics=result["metrics"],

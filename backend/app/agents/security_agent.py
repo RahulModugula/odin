@@ -71,7 +71,7 @@ async def run_security_agent(
                 confidence=f.confidence,
                 source="ai",
             )
-            for f in result.findings
+            for f in result.findings  # type: ignore[union-attr]
         ]
     except Exception as e:
         logger.error("security agent failed", error=str(e))

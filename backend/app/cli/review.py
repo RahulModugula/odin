@@ -24,6 +24,7 @@ import subprocess
 import sys
 import urllib.request
 from pathlib import Path
+from typing import Any
 
 # --------------------------------------------------------------------------- #
 # Colour helpers (degrades gracefully without colorama)                        #
@@ -253,7 +254,7 @@ def run_full_review(code: str, language_str: str, filename: str) -> list[dict]: 
         return run_rules_only(code, language_str)
 
 
-def run_local_review(code: str, language_str: str, filename: str) -> list[dict]:
+def run_local_review(code: str, language_str: str, filename: str) -> list[dict[str, Any]]:
     """Run full LangGraph pipeline in-process (no running server required)."""
     import asyncio
 
@@ -265,7 +266,7 @@ def run_local_review(code: str, language_str: str, filename: str) -> list[dict]:
             "code": code,
             "language": language_str,
             "ast_summary": "",
-            "metrics": None,
+            "metrics": None,  # type: ignore[typeddict-item]
             "findings": [],
             "agent_outputs": [],
             "overall_score": 100,
@@ -275,7 +276,7 @@ def run_local_review(code: str, language_str: str, filename: str) -> list[dict]:
         }
 
         result = asyncio.get_event_loop().run_until_complete(
-            review_graph.ainvoke(state, config={"callbacks": []})
+            review_graph.ainvoke(state, config={"callbacks": []})  # type: ignore[call-overload]
         )
 
         return [
@@ -313,7 +314,7 @@ def print_findings(findings: list[dict]) -> int:  # type: ignore[type-arg]
         src = dim(f"[{f.get('source', '?')}]")
         line = f"  line {f['line_start']}" if f.get("line_start") else ""
 
-        print(f"  {icon} {col_fn(sev.upper())} {src} {bold(f['title'])}{dim(line)}")
+        print(f"  {icon} {col_fn(sev.upper())} {src} {bold(f['title'])}{dim(line)}")  # type: ignore[no-untyped-call]
         desc = f.get("description", "")
         if desc:
             print(f"     {desc[:120]}")
@@ -332,7 +333,7 @@ def print_findings(findings: list[dict]) -> int:  # type: ignore[type-arg]
 # --------------------------------------------------------------------------- #
 
 
-def _to_sarif(all_findings: list[dict], files: list[Path]) -> dict:
+def _to_sarif(all_findings: list[dict[str, Any]], files: list[Path]) -> dict[str, Any]:
     """Convert findings to SARIF 2.1.0 format."""
     rules = {}
     results = []
@@ -613,7 +614,7 @@ def _run_review(args: argparse.Namespace) -> None:
         for sev in SEVERITY_ORDER:
             if counts.get(sev):
                 col = SEVERITY_COLOR.get(sev, lambda t: t)
-                print(f"  {col(sev)}: {counts[sev]}")
+                print(f"  {col(sev)}: {counts[sev]}")  # type: ignore[no-untyped-call]
 
         if args.json:
             print("\n" + json.dumps(all_findings, indent=2))

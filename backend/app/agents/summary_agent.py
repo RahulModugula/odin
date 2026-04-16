@@ -1,6 +1,7 @@
 """PR-level summary agent — generates walkthrough and change summary."""
 
 import json
+from typing import Any
 
 import structlog
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -32,8 +33,8 @@ Respond with JSON:
 async def generate_pr_summary(
     pr_title: str,
     pr_body: str,
-    file_changes: list[dict],  # [{filename, patch, additions, deletions}]
-) -> dict:  # type: ignore[type-arg]
+    file_changes: list[dict[str, Any]],  # [{filename, patch, additions, deletions}]
+) -> dict[str, Any]:
     """Generate a PR-level summary using LLM."""
     # Build a condensed view of changes (don't send full diffs, too expensive)
     changes_text = []
@@ -63,7 +64,8 @@ Generate the PR summary JSON."""
             HumanMessage(content=prompt),
         ]
         response = await llm.ainvoke(messages)
-        content = response.content
+        raw = response.content
+        content: str = raw if isinstance(raw, str) else (str(raw[0]) if raw else "")
 
         # Extract JSON
         if "```json" in content:
@@ -71,7 +73,7 @@ Generate the PR summary JSON."""
         elif "```" in content:
             content = content.split("```")[1].split("```")[0]
 
-        return json.loads(content.strip())
+        return json.loads(content.strip())  # type: ignore[no-any-return]
     except Exception as e:
         logger.warning("pr summary generation failed", error=str(e))
         return {

@@ -58,7 +58,7 @@ async def _run_review(
         "codebase_context": "",
         "file_path": file_path,
     }
-    result: dict[str, Any] = await review_graph.ainvoke(initial_state)
+    result: dict[str, Any] = await review_graph.ainvoke(initial_state)  # type: ignore[arg-type]
     return {
         "overall_score": result["overall_score"],
         "summary": result["summary"],
