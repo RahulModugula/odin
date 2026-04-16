@@ -413,6 +413,140 @@ def _to_sarif(all_findings: list[dict[str, Any]], files: list[Path]) -> dict[str
 
 
 # --------------------------------------------------------------------------- #
+# Fix application                                                              #
+# --------------------------------------------------------------------------- #
+
+
+def _show_diff(filepath: Path, line_start: int, line_end: int, fix_code: str) -> None:
+    """Print a minimal before/after diff for one fix."""
+    try:
+        lines = filepath.read_text(encoding="utf-8", errors="ignore").splitlines()
+        old = lines[line_start - 1 : line_end]
+        print(f"  {dim(f'lines {line_start}–{line_end}')}")
+        for ln in old:
+            print(f"  {red('- ' + ln)}")
+        for ln in fix_code.splitlines():
+            print(f"  {green('+ ' + ln)}")
+    except Exception:
+        print(f"  {dim('(could not read current file content)')}")
+
+
+def _apply_fix(filepath: Path, line_start: int, line_end: int, fix_code: str) -> bool:
+    """Replace lines line_start..line_end (1-indexed, inclusive) with fix_code."""
+    try:
+        text = filepath.read_text(encoding="utf-8")
+        lines = text.splitlines(keepends=True)
+        replacement = [fix_code + "\n"] if not fix_code.endswith("\n") else [fix_code]
+        new_lines = lines[: line_start - 1] + replacement + lines[line_end:]
+        filepath.write_text("".join(new_lines), encoding="utf-8")
+        return True
+    except Exception as exc:
+        print(red(f"  Error applying fix: {exc}"))
+        return False
+
+
+def _run_fix(args: argparse.Namespace) -> None:
+    """Execute the fix sub-command — apply LLM-suggested fixes interactively."""
+    # Collect fixable findings from JSON file or fresh review
+    fixable: list[dict[str, Any]] = []
+
+    if getattr(args, "from_json", None):
+        try:
+            raw = Path(args.from_json).read_text(encoding="utf-8")
+            data = json.loads(raw)
+            # Accept both a list of findings and a review-result envelope
+            if isinstance(data, list):
+                fixable = data
+            elif isinstance(data, dict):
+                fixable = data.get("findings", [])
+        except Exception as exc:
+            print(red(f"Could not load findings from {args.from_json}: {exc}"))
+            sys.exit(1)
+    else:
+        if not args.fix_paths:
+            print(yellow("Specify file paths or --from-json <findings.json>"))
+            sys.exit(1)
+        files = collect_files(args.fix_paths)
+        for filepath in files:
+            lang = _detect_language(filepath)
+            if not lang:
+                continue
+            try:
+                code = filepath.read_text(encoding="utf-8", errors="ignore")
+            except Exception:
+                continue
+            results = run_rules_only(code, lang)
+            for f in results:
+                f["file"] = str(filepath)
+            fixable.extend(results)
+
+    # Filter to findings that actually have a fix
+    fixable = [f for f in fixable if f.get("fix_code") and f.get("line_start")]
+
+    if not fixable:
+        print(green("✓ No fixable findings found."))
+        return
+
+    print(f"\n{bold('🔧 Odin Fix')}")
+    print(f"{dim(f'{len(fixable)} fixable finding(s) found')}\n")
+
+    # Group by file, sort each group bottom-to-top so line offsets stay valid
+    by_file: dict[str, list[dict[str, Any]]] = {}
+    for f in fixable:
+        by_file.setdefault(f.get("file", "unknown"), []).append(f)
+
+    applied = skipped = 0
+
+    for filepath_str, file_findings in by_file.items():
+        filepath = Path(filepath_str)
+        # Apply bottom-to-top: higher line numbers first so earlier offsets stay valid
+        sorted_findings = sorted(
+            file_findings, key=lambda f: f.get("line_start", 0), reverse=True
+        )
+        print(bold(filepath_str))
+
+        for finding in sorted_findings:
+            sev = finding.get("severity", "info")
+            icon = SEVERITY_ICON.get(sev, "•")
+            col_fn = SEVERITY_COLOR.get(sev, lambda t: t)
+            print(f"  {icon} {col_fn(sev.upper())} {bold(finding['title'])}")
+
+            line_start = int(finding["line_start"])
+            line_end = int(finding.get("line_end") or line_start)
+            fix_code = finding["fix_code"]
+
+            _show_diff(filepath, line_start, line_end, fix_code)
+
+            if getattr(args, "auto", False):
+                ok = _apply_fix(filepath, line_start, line_end, fix_code)
+                if ok:
+                    print(f"  {green('✓ Applied')}\n")
+                    applied += 1
+                else:
+                    skipped += 1
+            else:
+                try:
+                    answer = input("  Apply this fix? [y/N] ").strip().lower()
+                except (EOFError, KeyboardInterrupt):
+                    print()
+                    break
+                if answer in ("y", "yes"):
+                    ok = _apply_fix(filepath, line_start, line_end, fix_code)
+                    if ok:
+                        print(f"  {green('✓ Applied')}\n")
+                        applied += 1
+                    else:
+                        skipped += 1
+                else:
+                    print(f"  {dim('Skipped')}\n")
+                    skipped += 1
+
+    print(
+        bold(f"\nDone: {applied} fix(es) applied, {skipped} skipped.")
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Argument parser                                                              #
 # --------------------------------------------------------------------------- #
 
@@ -427,32 +561,27 @@ Examples:
   # Review a single file (rules-only, no server needed)
   odin review backend/app/main.py --rules-only
 
-  # Review all Python files in a directory
-  odin review backend/app
-
   # Review staged git changes (pre-push hook)
   odin review --staged
 
-  # Rules-only mode (instant, zero LLM cost)
-  odin review --staged --rules-only
+  # Apply AI-suggested fixes interactively
+  odin fix backend/app/main.py --rules-only
 
-  # Suppress output on clean scans (for CI/hooks)
-  odin review --staged --quiet && git push
+  # Apply all fixes automatically (CI)
+  odin fix --from-json findings.json --auto
 
-  # Output as JSON for CI/scripting
-  odin review --staged --json | jq .
+  # Quality gate: fail CI if score < 70 or any critical findings
+  odin review --staged --fail-on-score 70 --fail-on critical
 
-  # Filter by severity and confidence
-  odin review backend/ --min-severity high --min-confidence 0.8
-
-  # As a uvx one-liner (no install needed)
-  uvx odin review myfile.py --rules-only
+  # Load per-project settings from .odin.yml automatically
+  odin review backend/
         """,
     )
 
-    # Top-level subcommands — currently only "review"
+    # Top-level subcommands
     sub = parser.add_subparsers(dest="command")
 
+    # ---- review subcommand ----
     review = sub.add_parser(
         "review",
         help="Review files for code issues",
@@ -472,22 +601,29 @@ Examples:
     )
     review.add_argument(
         "--min-severity",
-        default="low",
+        default=None,
         choices=SEVERITY_ORDER,
-        help="Show only findings at this severity or worse (default: low)",
+        help="Show only findings at this severity or worse (default: low, or from .odin.yml)",
     )
     review.add_argument(
         "--fail-on",
-        default="high",
+        default=None,
         choices=SEVERITY_ORDER + ["never"],
-        help="Exit with code 1 if this severity or worse is found (default: high)",
+        help="Exit code 1 if this severity or worse found (default: high, or from .odin.yml)",
+    )
+    review.add_argument(
+        "--fail-on-score",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Exit with code 2 if overall review score < N (0–100)",
     )
     review.add_argument(
         "--min-confidence",
         type=float,
-        default=0.0,
+        default=None,
         metavar="FLOAT",
-        help="Filter to findings with confidence >= FLOAT (0.0–1.0, default: 0.0)",
+        help="Filter to findings with confidence >= FLOAT (0.0–1.0)",
     )
     review.add_argument(
         "--json",
@@ -510,6 +646,39 @@ Examples:
         action="store_true",
         help="Suppress banner and success messages (findings always shown)",
     )
+    review.add_argument(
+        "--no-config",
+        action="store_true",
+        help="Ignore .odin.yml project config",
+    )
+
+    # ---- fix subcommand ----
+    fix_p = sub.add_parser(
+        "fix",
+        help="Apply AI-suggested fixes to findings interactively",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description=(
+            "Apply fix_code suggestions from Odin findings.\n\n"
+            "Runs a rules-only review on the given files, shows each proposed fix\n"
+            "with a before/after diff, and applies fixes you confirm.\n\n"
+            "Examples:\n"
+            "  odin fix backend/app/main.py           # interactive review + fix\n"
+            "  odin fix --from-json findings.json     # fix from saved JSON output\n"
+            "  odin fix --staged --auto               # auto-apply all fixes (CI)\n"
+        ),
+    )
+    fix_p.add_argument("fix_paths", nargs="*", help="Files or directories to review and fix")
+    fix_p.add_argument("--staged", action="store_true", help="Fix staged files")
+    fix_p.add_argument(
+        "--from-json",
+        metavar="FILE",
+        help="Load findings from a JSON file (output of odin review --json)",
+    )
+    fix_p.add_argument(
+        "--auto",
+        action="store_true",
+        help="Apply all fixes without confirmation (use in CI after review)",
+    )
 
     # ---- init subcommand ----
     init_parser = sub.add_parser("init", help="Set up Odin in the current repository")
@@ -519,12 +688,34 @@ Examples:
 
 
 # --------------------------------------------------------------------------- #
-# Main                                                                         #
+# Main review runner                                                           #
 # --------------------------------------------------------------------------- #
 
 
 def _run_review(args: argparse.Namespace) -> None:
     """Execute the review sub-command."""
+    # Load per-project config (.odin.yml) unless --no-config was passed
+    from app.cli.config import load_config
+
+    cfg = load_config() if not getattr(args, "no_config", False) else None
+
+    # Resolve effective settings: CLI flag > config > default
+    min_severity: str = (
+        args.min_severity
+        or (cfg.min_severity if cfg else None)
+        or "low"
+    )
+    fail_on: str = (
+        args.fail_on
+        or (cfg.fail_on if cfg else None)
+        or "high"
+    )
+    min_confidence: float = (
+        args.min_confidence
+        if args.min_confidence is not None
+        else (cfg.min_confidence if cfg else 0.0)
+    )
+
     if args.staged:
         files = get_staged_files()
         if not files:
@@ -540,24 +731,32 @@ def _run_review(args: argparse.Namespace) -> None:
     else:
         files = collect_files(["."])
 
+    # Apply .odin.yml exclude patterns
+    if cfg and cfg.exclude:
+        files = [f for f in files if not cfg.is_excluded(str(f))]
+
     if not files:
         print(yellow("No supported files found"))
         return
 
-    min_idx = SEVERITY_ORDER.index(args.min_severity)
-    fail_idx = SEVERITY_ORDER.index(args.fail_on) if args.fail_on != "never" else 99
+    min_idx = SEVERITY_ORDER.index(min_severity)
+    fail_idx = SEVERITY_ORDER.index(fail_on) if fail_on != "never" else 99
 
     if not args.quiet:
         print(f"\n{bold('🔍 Odin Code Review')}\n")
-        if args.rules_only:
+        if getattr(args, "rules_only", False):
             mode = "rules-only"
         elif getattr(args, "local", False):
             mode = "local (rules + AI)"
         else:
             mode = "full (rules + AI)"
+        if cfg and cfg.config_path:
+            print(f"{dim('Config:')} {cfg.config_path}")
         print(f"{dim('Files:')} {len(files)}  {dim('Mode:')} {mode}\n")
 
-    all_findings: list[dict] = []  # type: ignore[type-arg]
+    all_findings: list[dict[str, Any]] = []
+    # Track per-file scores for quality gate
+    file_scores: list[int] = []
 
     for filepath in files:
         lang = _detect_language(filepath)
@@ -568,9 +767,10 @@ def _run_review(args: argparse.Namespace) -> None:
         except Exception:
             continue
 
-        print(bold(str(filepath)))
+        if not args.quiet:
+            print(bold(str(filepath)))
 
-        if args.rules_only:
+        if getattr(args, "rules_only", False):
             findings = run_rules_only(code, lang)
         elif getattr(args, "local", False):
             findings = run_local_review(code, lang, str(filepath))
@@ -580,22 +780,31 @@ def _run_review(args: argparse.Namespace) -> None:
         for f in findings:
             f["file"] = str(filepath)
 
+        # Apply .odin.yml ignore rules
+        if cfg and cfg.ignore:
+            findings = [
+                f for f in findings
+                if not cfg.is_ignored(f.get("title", ""), str(filepath))
+            ]
+
         findings = [
             f for f in findings if SEVERITY_ORDER.index(f.get("severity", "info")) <= min_idx
         ]
-        if args.min_confidence > 0:
-            findings = [f for f in findings if f.get("confidence", 1.0) >= args.min_confidence]
+        if min_confidence > 0:
+            findings = [f for f in findings if f.get("confidence", 1.0) >= min_confidence]
 
         if not findings:
             if not args.quiet:
                 print(f"  {green('✓ No issues found')}\n")
         else:
-            if not args.quiet:
-                print_findings(findings)
-            else:
-                print(bold(str(filepath)))
-                print_findings(findings)
+            print_findings(findings)
             all_findings.extend(findings)
+
+        # Collect score for quality gate (only available from full/local review)
+        if isinstance(findings, list) and any(f.get("overall_score") is not None for f in findings):
+            scores = [f["overall_score"] for f in findings if f.get("overall_score") is not None]
+            if scores:
+                file_scores.append(min(scores))
 
     # ---- SARIF output (early return) ----
     if args.sarif:
@@ -610,11 +819,12 @@ def _run_review(args: argparse.Namespace) -> None:
             sev = f.get("severity", "info")
             counts[sev] = counts.get(sev, 0) + 1
 
-        print(bold(f"Summary: {len(all_findings)} finding(s) in {len(files)} file(s)"))
-        for sev in SEVERITY_ORDER:
-            if counts.get(sev):
-                col = SEVERITY_COLOR.get(sev, lambda t: t)
-                print(f"  {col(sev)}: {counts[sev]}")  # type: ignore[no-untyped-call]
+        if not args.quiet:
+            print(bold(f"Summary: {len(all_findings)} finding(s) in {len(files)} file(s)"))
+            for sev in SEVERITY_ORDER:
+                if counts.get(sev):
+                    col = SEVERITY_COLOR.get(sev, lambda t: t)
+                    print(f"  {col(sev)}: {counts[sev]}")  # type: ignore[no-untyped-call]
 
         if args.json:
             print("\n" + json.dumps(all_findings, indent=2))
@@ -622,26 +832,55 @@ def _run_review(args: argparse.Namespace) -> None:
         if not args.quiet:
             print(green("✓ All clear!"))
 
-    # ---- exit code ----
-    if args.fail_on != "never":
+    # ---- exit code 1: blocking findings ----
+    if fail_on != "never":
         blockers = [
-            f for f in all_findings if SEVERITY_ORDER.index(f.get("severity", "info")) <= fail_idx
+            f for f in all_findings
+            if SEVERITY_ORDER.index(f.get("severity", "info")) <= fail_idx
         ]
         if blockers:
-            print(f"\n{red(f'✗ {len(blockers)} blocking finding(s) at {args.fail_on}+ severity')}")
+            print(f"\n{red(f'✗ {len(blockers)} blocking finding(s) at {fail_on}+ severity')}")
             sys.exit(1)
+
+    # ---- exit code 2: quality gate ----
+    gate_score: int | None = args.fail_on_score
+    gate_max_critical: int = -1
+    gate_max_high: int = -1
+
+    if cfg and cfg.quality_gate.is_active():
+        gate_score = gate_score or cfg.quality_gate.min_score or None
+        gate_max_critical = cfg.quality_gate.max_critical
+        gate_max_high = cfg.quality_gate.max_high
+
+    gate_failures: list[str] = []
+
+    if gate_score and file_scores and min(file_scores) < gate_score:
+        gate_failures.append(f"score {min(file_scores)} < required {gate_score}")
+
+    critical_count = sum(1 for f in all_findings if f.get("severity") == "critical")
+    high_count = sum(1 for f in all_findings if f.get("severity") == "high")
+
+    if gate_max_critical >= 0 and critical_count > gate_max_critical:
+        gate_failures.append(f"{critical_count} critical (max {gate_max_critical})")
+    if gate_max_high >= 0 and high_count > gate_max_high:
+        gate_failures.append(f"{high_count} high (max {gate_max_high})")
+
+    if gate_failures:
+        print(f"\n{red('✗ Quality gate failed:')} {', '.join(gate_failures)}")
+        sys.exit(2)
 
 
 def main() -> None:
     """Entry point for `odin` CLI (uvx odin / pip install odin)."""
     parser = _build_parser()
-
-    # Support legacy invocation: `odin review file.py` is the canonical form.
-    # If the user calls the script directly without a sub-command we show help.
     args = parser.parse_args()
 
     if args.command == "review":
         _run_review(args)
+    elif args.command == "fix":
+        if getattr(args, "staged", False):
+            args.fix_paths = [str(p) for p in get_staged_files()]
+        _run_fix(args)
     elif args.command == "init":
         from app.cli.init import run_init
 

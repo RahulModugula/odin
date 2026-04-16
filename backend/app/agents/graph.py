@@ -248,6 +248,12 @@ def synthesize(state: ReviewState) -> dict:  # type: ignore[type-arg]
     # Deduplicate: same line range + same category = keep higher confidence
     deduped = _deduplicate_findings(findings)
 
+    # Diff-aware: downgrade findings not near any changed line range.
+    # Only fires on PR reviews where changed_lines is populated.
+    changed_lines: list[tuple[int, int]] = state.get("changed_lines", [])  # type: ignore[assignment]
+    if changed_lines:
+        deduped = _tag_pre_existing(deduped, changed_lines)
+
     # Sort by severity (critical first), then by line number
     severity_order = list(Severity)
     deduped.sort(
@@ -268,6 +274,55 @@ def synthesize(state: ReviewState) -> dict:  # type: ignore[type-arg]
         "overall_score": score,
         "summary": summary,
     }
+
+
+_SEVERITY_DOWNGRADE: dict[Severity, Severity] = {
+    Severity.CRITICAL: Severity.HIGH,
+    Severity.HIGH: Severity.MEDIUM,
+    Severity.MEDIUM: Severity.LOW,
+    Severity.LOW: Severity.INFO,
+    Severity.INFO: Severity.INFO,
+}
+
+_DIFF_PROXIMITY = 10  # lines within a changed hunk still count as "near"
+
+
+def _tag_pre_existing(
+    findings: list[Finding],
+    changed_lines: list[tuple[int, int]],
+) -> list[Finding]:
+    """Downgrade findings not near any changed line range by one severity level.
+
+    Findings on unchanged lines are likely pre-existing issues not introduced by
+    this PR. They are not dropped (that would hide real bugs) but are downgraded
+    one severity level and annotated so reviewers know to prioritise diff-local
+    findings first.
+    """
+    result = []
+    for f in findings:
+        if f.line_start is None:
+            # No line number — can't determine proximity; keep as-is
+            result.append(f)
+            continue
+        near = any(
+            (start - _DIFF_PROXIMITY) <= f.line_start <= (end + _DIFF_PROXIMITY)
+            for start, end in changed_lines
+        )
+        if near:
+            result.append(f)
+        else:
+            result.append(
+                f.model_copy(
+                    update={
+                        "severity": _SEVERITY_DOWNGRADE[f.severity],
+                        "description": (
+                            f.description
+                            + "\n\n*Pre-existing: this issue was not introduced by this PR.*"
+                        ),
+                    }
+                )
+            )
+    return result
 
 
 def _deduplicate_findings(findings: list[Finding]) -> list[Finding]:
