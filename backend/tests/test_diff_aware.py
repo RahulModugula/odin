@@ -1,6 +1,5 @@
 """Tests for diff-aware finding filtering in the synthesize node."""
 
-
 from app.agents.graph import _tag_pre_existing, synthesize
 from app.models.enums import Category, Severity
 from app.models.schemas import CodeMetrics, Finding

@@ -36,9 +36,9 @@ _CONFIG_NAMES = (".odin.yml", ".odin.yaml")
 
 @dataclass
 class QualityGate:
-    min_score: int = 0        # fail if overall_score < min_score (0 = disabled)
-    max_critical: int = -1    # fail if critical_count > max_critical (-1 = disabled)
-    max_high: int = -1        # fail if high_count > max_high (-1 = disabled)
+    min_score: int = 0  # fail if overall_score < min_score (0 = disabled)
+    max_critical: int = -1  # fail if critical_count > max_critical (-1 = disabled)
+    max_high: int = -1  # fail if high_count > max_high (-1 = disabled)
 
     @classmethod
     def from_dict(cls, d: dict) -> QualityGate:  # type: ignore[type-arg]
@@ -54,8 +54,8 @@ class QualityGate:
 
 @dataclass
 class IgnoreRule:
-    rule: str          # substring match against finding title
-    path: str = ""     # glob pattern against file path (empty = all files)
+    rule: str  # substring match against finding title
+    path: str = ""  # glob pattern against file path (empty = all files)
     reason: str = ""
 
 
@@ -110,6 +110,7 @@ def _load_yaml(path: Path) -> dict:  # type: ignore[type-arg]
     """Parse a YAML file. Falls back to a minimal hand-parser when PyYAML is absent."""
     try:
         import yaml  # type: ignore[import-untyped]
+
         with path.open(encoding="utf-8") as f:
             return yaml.safe_load(f) or {}
     except ImportError:
