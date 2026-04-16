@@ -27,7 +27,7 @@ jobs:
       - run: uv sync --dev
       - run: uv run ruff check app/ tests/ --output-format=github
       - run: uv run ruff format --check app/ tests/
-      - run: uv run mypy app/ --ignore-missing-imports
+      - run: uv run mypy --strict app/
 
   backend-test:
     name: Backend tests
@@ -71,7 +71,7 @@ jobs:
           fail_ci_if_error: false
 
   backend-eval:
-    name: Benchmark (rules-only)
+    name: Benchmark (rules-only, internal)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -89,6 +89,39 @@ jobs:
         with:
           name: eval-results
           path: backend/eval/results/latest_rules.json
+
+  bench-harness:
+    name: Benchmark harness (FP regression gate)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+      - run: uv sync
+      - name: Run clean-corpus FP benchmark
+        run: |
+          uv run python -m bench.harness \
+            --dataset clean_corpus \
+            --seed 42 \
+            --json > bench/reports/results/ci-clean-corpus.json
+      - name: Run secvuleval recall benchmark
+        run: |
+          uv run python -m bench.harness \
+            --dataset secvuleval \
+            --seed 42 \
+            --json > bench/reports/results/ci-secvuleval.json
+      - name: Regenerate leaderboard
+        run: uv run python -m bench.harness --seed 42
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bench-results
+          path: backend/bench/reports/results/
+          retention-days: 30
 
   # ── Frontend ──────────────────────────────────────────────────────────────
   frontend:
