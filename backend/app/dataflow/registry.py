@@ -241,6 +241,34 @@ _PYTHON_SINKS: list[SinkSpec] = [
         call_pattern="yaml.load(",
         tainted_arg_positions=(0,),
     ),
+    # Flask SSTI — render_template_string executes Jinja2 template code (CWE-94)
+    SinkSpec(
+        kind=SinkKind.TEMPLATE_RENDER,
+        language=Language.PYTHON,
+        call_pattern="render_template_string(",
+        tainted_arg_positions=(0,),
+    ),
+    # Shell injection via check_output (equivalent risk to subprocess.run shell=True)
+    SinkSpec(
+        kind=SinkKind.SHELL_EXEC,
+        language=Language.PYTHON,
+        call_pattern="subprocess.check_output(",
+        tainted_arg_positions=(0,),
+        kwarg_conditions={"shell": "True"},
+    ),
+    # os.exec family — replace process image with attacker-controlled binary (CWE-78)
+    SinkSpec(
+        kind=SinkKind.SHELL_EXEC,
+        language=Language.PYTHON,
+        call_pattern="os.execve(",
+        tainted_arg_positions=(0,),
+    ),
+    SinkSpec(
+        kind=SinkKind.SHELL_EXEC,
+        language=Language.PYTHON,
+        call_pattern="os.execvp(",
+        tainted_arg_positions=(0,),
+    ),
 ]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -399,6 +427,19 @@ _JS_SINKS: list[SinkSpec] = [
         kind=SinkKind.SQL_QUERY,
         language=Language.JAVASCRIPT,
         call_pattern=".raw(",
+        tainted_arg_positions=(0,),
+    ),
+    # DOM-based open redirect / XSS via location manipulation
+    SinkSpec(
+        kind=SinkKind.DOM_WRITE,
+        language=Language.JAVASCRIPT,
+        call_pattern="location.href",
+        tainted_arg_positions=(0,),
+    ),
+    SinkSpec(
+        kind=SinkKind.DOM_WRITE,
+        language=Language.JAVASCRIPT,
+        call_pattern="location.replace(",
         tainted_arg_positions=(0,),
     ),
 ]

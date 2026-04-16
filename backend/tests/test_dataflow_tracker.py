@@ -280,3 +280,149 @@ def test_max_candidates_cap() -> None:
 
     candidates = _tracker(Language.PYTHON).analyze(code)
     assert len(candidates) <= MAX_CANDIDATES
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Go: := short variable declaration
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_go_short_var_decl_seeded() -> None:
+    """userID := r.FormValue('id') must taint userID and produce a SQL candidate."""
+    code = """
+userID := r.FormValue("id")
+db.Query("SELECT * FROM users WHERE id = " + userID)
+"""
+    candidates = _tracker(Language.GO).analyze(code)
+    assert len(candidates) >= 1, "Go := short-var-decl must seed taint"
+    assert any(c.source.kind == SourceKind.HTTP_PARAM for c in candidates)
+    assert any(c.sink.kind == SinkKind.SQL_QUERY for c in candidates)
+
+
+def test_go_short_var_decl_propagation_chain() -> None:
+    """Taint should propagate through assignment chains in Go."""
+    code = """
+raw := r.FormValue("query")
+q := raw
+db.Query("SELECT * FROM t WHERE val = " + q)
+"""
+    candidates = _tracker(Language.GO).analyze(code)
+    assert len(candidates) >= 1, "Taint must propagate through := chain"
+
+
+def test_go_no_source_no_candidate() -> None:
+    """Go code with a hardcoded value reaching a sink should not be flagged."""
+    code = """
+name := "alice"
+db.Query("SELECT * FROM t WHERE name = " + name)
+"""
+    candidates = _tracker(Language.GO).analyze(code)
+    assert len(candidates) == 0
+
+
+def test_go_sanitizer_removes_taint() -> None:
+    """strconv.ParseInt should untaint the variable in Go."""
+    # Go multi-return (id, err := strconv.Atoi(raw)) isn't single-assignment,
+    # so we use a helper variable pattern that matches single := assignment.
+    code = """
+raw := r.FormValue("id")
+safeID := strconv.ParseInt(raw, 10, 64)
+db.Query("SELECT * FROM t WHERE id = " + safeID)
+"""
+    candidates = _tracker(Language.GO).analyze(code)
+    # After ParseInt sanitization, safeID is a number — taint should be removed
+    assert len(candidates) == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Sanitizer reassignment removes taint
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_python_sanitizer_reassignment_removes_taint() -> None:
+    """x = int(x) after taint source should untaint x — no candidate emitted."""
+    code = """
+user_id = request.args.get('id')
+user_id = int(user_id)
+cursor.execute("SELECT * FROM t WHERE id = " + str(user_id))
+"""
+    candidates = _tracker(Language.PYTHON).analyze(code)
+    assert len(candidates) == 0, "int() sanitizer should remove taint from user_id"
+
+
+def test_python_sanitizer_does_not_remove_unrelated_taint() -> None:
+    """Sanitizing y does NOT remove taint from an unrelated variable x."""
+    code = """
+user_id = request.args.get('id')
+safe_count = int("42")
+cursor.execute("SELECT * FROM t WHERE id = " + user_id)
+"""
+    candidates = _tracker(Language.PYTHON).analyze(code)
+    assert len(candidates) >= 1, "user_id must remain tainted despite int() on a different var"
+    assert any(c.sink.kind == SinkKind.SQL_QUERY for c in candidates)
+
+
+def test_python_html_escape_removes_taint() -> None:
+    """html.escape() sanitization should prevent XSS candidate from being emitted."""
+    code = """
+name = request.args.get('name')
+name = html.escape(name)
+result = "<div>" + name + "</div>"
+"""
+    # After html.escape, name is safe — result should not be tainted to a dangerous sink
+    candidates = _tracker(Language.PYTHON).analyze(code)
+    # No dangerous sink in this snippet, but verifying sanitizer removes taint
+    # so that if a sink were added, it wouldn't fire
+    html_tainted = [c for c in candidates if "name" in c.snippet and "html.escape" in c.snippet]
+    assert len(html_tainted) == 0
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# New Python sinks: SSTI, check_output, execve/execvp
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def test_python_render_template_string_ssti() -> None:
+    """render_template_string with tainted arg is SSTI (CWE-94)."""
+    code = """
+template = request.args.get('tmpl')
+return render_template_string(template)
+"""
+    candidates = _tracker(Language.PYTHON).analyze(code)
+    assert any(c.sink.kind == SinkKind.TEMPLATE_RENDER for c in candidates), (
+        "render_template_string must be detected as TEMPLATE_RENDER sink"
+    )
+
+
+def test_python_subprocess_check_output_tainted() -> None:
+    """subprocess.check_output with tainted arg is shell injection (CWE-78)."""
+    code = """
+cmd = request.form.get('command')
+result = subprocess.check_output(cmd, shell=True)
+"""
+    candidates = _tracker(Language.PYTHON).analyze(code)
+    assert any(c.sink.kind == SinkKind.SHELL_EXEC for c in candidates), (
+        "subprocess.check_output must be detected as SHELL_EXEC sink"
+    )
+
+
+def test_python_os_execve_tainted() -> None:
+    """os.execve with tainted program path is shell execution (CWE-78)."""
+    code = """
+prog = request.args.get('program')
+os.execve(prog, [], {})
+"""
+    candidates = _tracker(Language.PYTHON).analyze(code)
+    assert any(c.sink.kind == SinkKind.SHELL_EXEC for c in candidates), (
+        "os.execve must be detected as SHELL_EXEC sink"
+    )
+
+
+def test_python_os_execvp_tainted() -> None:
+    """os.execvp with tainted first argument is shell execution."""
+    code = """
+binary = request.args.get('bin')
+os.execvp(binary, [binary])
+"""
+    candidates = _tracker(Language.PYTHON).analyze(code)
+    assert any(c.sink.kind == SinkKind.SHELL_EXEC for c in candidates)

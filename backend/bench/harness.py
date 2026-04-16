@@ -49,6 +49,7 @@ from bench.tools.common import BenchSample, ToolRunner
 from bench.tools.copilot_review import CopilotReviewRunner
 from bench.tools.greptile import GreptileRunner
 from bench.tools.odin import OdinRulesRunner
+from bench.tools.odin_dataflow import OdinDataflowRunner
 from bench.tools.qodo import QodoRunner
 from bench.tools.semgrep import SemgrepRunner
 
@@ -88,6 +89,7 @@ def _load_clean_corpus() -> list[BenchSample]:
 def _build_runners(filter_tool: str | None) -> list[ToolRunner]:
     candidates: list[ToolRunner] = [
         OdinRulesRunner(),
+        OdinDataflowRunner(),
         SemgrepRunner(),
         CodeQLRunner(),
         CodeRabbitRunner(),

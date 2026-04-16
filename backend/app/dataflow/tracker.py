@@ -67,6 +67,12 @@ class IntraProceduralTaintTracker:
         # Python: var = expr  /  JS: const/let/var/  var = expr
         self._assign_py = re.compile(r"^(\w+)\s*=\s*(.+)$")
         self._assign_js = re.compile(r"(?:const|let|var)?\s*(\w+)\s*=\s*(.+)$")
+        # Go: short-var-decl  id := expr  OR  var id [Type] = expr
+        self._assign_go = re.compile(r"^(?:var\s+)?(\w+)(?:\s+\w+)?\s*(?::=|=)\s*(.+)$")
+        # Java: [modifier] Type id = expr  (handles generics via non-greedy match)
+        self._assign_java = re.compile(
+            r"^(?:(?:final|static|volatile|public|private|protected)\s+)*[\w<>\[\]]+\s+(\w+)\s*=\s*(.+)$"
+        )
         self._fstring_py = re.compile(r'f["\'].*\{(\w+)\}')
         self._template_js = re.compile(r"`[^`]*\$\{(\w+)\}[^`]*`")
 
@@ -81,7 +87,15 @@ class IntraProceduralTaintTracker:
         tainted: dict[str, _TaintedVar] = {}  # var_name → TaintedVar
         candidates: list[TaintCandidate] = []
 
-        assign_pattern = self._assign_py if self._lang == Language.PYTHON else self._assign_js
+        _assign_by_lang = {
+            Language.PYTHON: self._assign_py,
+            Language.JAVASCRIPT: self._assign_js,
+            Language.TYPESCRIPT: self._assign_js,
+            Language.GO: self._assign_go,
+            Language.JAVA: self._assign_java,
+            Language.RUST: self._assign_js,  # 'let x =' already matches the JS pattern
+        }
+        assign_pattern = _assign_by_lang.get(self._lang, self._assign_js)
 
         for lineno, raw_line in enumerate(lines, 1):
             line = raw_line.strip()
@@ -127,6 +141,14 @@ class IntraProceduralTaintTracker:
                             hops=new_hops,
                         )
                         break
+
+            # ── 2b. Sanitizer re-assignment — untaint if LHS is already tainted
+            #        and the new RHS passes through a sanitizer.
+            #        e.g.:  user_id = int(user_id)  →  user_id is now safe.
+            elif lhs and lhs in tainted:
+                rhs = raw_line.split("=", 1)[-1] if "=" in raw_line else ""
+                if self._san.is_sanitizer(rhs, self._lang):
+                    del tainted[lhs]
 
             # ── 3. Check for sink matches ──────────────────────────────────
             sink_matches = self._snk.matches(raw_line, self._lang)

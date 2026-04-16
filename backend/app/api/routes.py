@@ -412,6 +412,45 @@ async def submit_feedback(
     return {"status": "recorded", "finding_id": request.finding_id, "action": request.action}
 
 
+class TaintFeedbackRequest(BaseModel):
+    candidate_id: str
+    source_sig: str  # TaintCandidate.source.signature
+    sink_sig: str  # TaintCandidate.sink.signature
+    language: str = "python"
+
+
+@router.post("/feedback/taint")
+async def submit_taint_feedback(
+    request: TaintFeedbackRequest,
+    req: Request = None,  # type: ignore[assignment]
+) -> dict[str, object]:
+    """Record a false-positive on a taint source→sink pair.
+
+    After ``feedback_taint_threshold`` FP reports for the same (source_sig, sink_sig)
+    pair, the pair is suppressed *before* the LLM triage stage runs — saving token
+    spend, not just filtering UI noise.
+    """
+    redis = getattr(req.app.state, "redis", None) if req else None
+    if redis is None:
+        raise HTTPException(status_code=503, detail="Redis is not available")
+
+    from app.services.feedback import FeedbackService
+
+    service = FeedbackService(redis)
+    await service.record_taint_false_positive(
+        source_sig=request.source_sig,
+        sink_sig=request.sink_sig,
+        language=request.language,
+        candidate_id=request.candidate_id,
+    )
+    return {
+        "status": "recorded",
+        "candidate_id": request.candidate_id,
+        "source_sig": request.source_sig,
+        "sink_sig": request.sink_sig,
+    }
+
+
 @router.get("/feedback/stats")
 async def feedback_stats(req: Request = None) -> dict[str, Any]:  # type: ignore[assignment]
     """Return FP rate and suppression stats over time per team."""

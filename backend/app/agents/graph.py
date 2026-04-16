@@ -1,3 +1,4 @@
+import structlog
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send
 
@@ -9,6 +10,8 @@ from app.models.enums import Category, Language, Severity
 from app.models.schemas import AgentOutput, CodeMetrics, Finding
 from app.models.state import ReviewState
 from app.parsers.tree_sitter_parser import parse_code
+
+logger = structlog.get_logger()
 
 SEVERITY_PENALTY = {
     Severity.CRITICAL: 20,
@@ -272,8 +275,9 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
                 if ic.candidate_id not in seen_ids:
                     candidates.append(ic)
                     seen_ids.add(ic.candidate_id)
-        except Exception:
-            pass  # interprocedural is best-effort; intra results still used
+        except Exception as exc:
+            logger.debug("interprocedural triage skipped", error=str(exc))
+            # interprocedural is best-effort; intra results still used
 
         if not candidates:
             return {"findings": [], "agent_outputs": []}
@@ -313,6 +317,7 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
                     line_start=candidate.sink_location[0],
                     line_end=candidate.sink_location[0],
                     suggestion=verdict.suggested_sanitizer,
+                    fix_code=verdict.suggested_sanitizer or None,
                     attack_scenario=verdict.exploit_scenario,
                     confidence=verdict.confidence,
                     source="dataflow",
@@ -322,7 +327,12 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
         output = AgentOutput(agent_name="dataflow_triage", findings=findings)
         return {"findings": findings, "agent_outputs": [output]}
 
-    except Exception:
+    except Exception as exc:
+        logger.exception(
+            "dataflow_triage_node failed",
+            error=str(exc),
+            language=state.get("language", "unknown"),
+        )
         return {"findings": [], "agent_outputs": []}
 
 
