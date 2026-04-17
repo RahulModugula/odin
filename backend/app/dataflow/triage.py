@@ -11,12 +11,13 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
 from typing import Any
+
+import structlog
 
 from app.dataflow.schemas import TaintCandidate, TriageVerdict
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger()
 
 TRIAGE_CONFIDENCE_FLOOR = 0.6
 CRAG_CONFIDENCE_THRESHOLD = 0.6

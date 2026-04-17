@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
+from typing import Any
 
 from app.graph_rag.models import GraphEdge, GraphNode
 from app.models.enums import Language
@@ -34,7 +35,7 @@ def _node_id(kind: str, name: str, file_path: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
-def _extract_signature_from_ast(node, code_bytes: bytes, lang_key: str) -> str | None:
+def _extract_signature_from_ast(node: Any, code_bytes: bytes, lang_key: str) -> str | None:
     try:
         from tree_sitter import Node
 
@@ -46,15 +47,16 @@ def _extract_signature_from_ast(node, code_bytes: bytes, lang_key: str) -> str |
         params_node = node.child_by_field_name("parameters")
         return_node = node.child_by_field_name("return_type")
         name_text = ""
-        if node.child_by_field_name("name") and node.child_by_field_name("name").text:
-            name_text = node.child_by_field_name("name").text.decode("utf-8")
+        name_node_raw = node.child_by_field_name("name")
+        if name_node_raw is not None and name_node_raw.text is not None:
+            name_text = name_node_raw.text.decode("utf-8")
 
         params_text = ""
-        if params_node and params_node.text:
+        if params_node is not None and params_node.text is not None:
             params_text = params_node.text.decode("utf-8")
 
         return_text = ""
-        if return_node and return_node.text:
+        if return_node is not None and return_node.text is not None:
             return_text = " -> " + return_node.text.decode("utf-8")
 
         if name_text:
@@ -62,7 +64,7 @@ def _extract_signature_from_ast(node, code_bytes: bytes, lang_key: str) -> str |
     return None
 
 
-def _extract_decorators(node, lang_key: str) -> list[str]:
+def _extract_decorators(node: Any, lang_key: str) -> list[str]:
     decorators: list[str] = []
     try:
         from tree_sitter import Node
@@ -82,7 +84,7 @@ def _extract_decorators(node, lang_key: str) -> list[str]:
     return decorators
 
 
-def _extract_type_info(node, lang_key: str) -> tuple[list[str], str | None]:
+def _extract_type_info(node: Any, lang_key: str) -> tuple[list[str], str | None]:
     param_types: list[str] = []
     return_type: str | None = None
 
@@ -111,7 +113,7 @@ def _extract_type_info(node, lang_key: str) -> tuple[list[str], str | None]:
     return param_types, return_type
 
 
-def _extract_class_inheritance(node, lang_key: str) -> str | None:
+def _extract_class_inheritance(node: Any, lang_key: str) -> str | None:
     try:
         from tree_sitter import Node
 
@@ -136,7 +138,7 @@ def _extract_class_inheritance(node, lang_key: str) -> str | None:
 
 
 def _extract_method_overrides(
-    class_node, class_name: str, parent_class: str, file_path: str, lang_key: str
+    class_node: Any, class_name: str, parent_class: str, file_path: str, lang_key: str
 ) -> list[GraphEdge]:
     edges: list[GraphEdge] = []
     try:
@@ -169,7 +171,7 @@ def _extract_method_overrides(
     return edges
 
 
-def _extract_docstring(node, lang_key: str) -> str | None:
+def _extract_docstring(node: Any, lang_key: str) -> str | None:
     if lang_key != "python":
         return None
     try:

@@ -101,7 +101,7 @@ class VectorStore:
             else:
                 self._client = chromadb.Client()
 
-            self._embedding_fn = chromadb.utils.embedding_functions.DefaultEmbeddingFunction()
+            self._embedding_fn = chromadb.utils.embedding_functions.DefaultEmbeddingFunction()  # type: ignore[attr-defined]
 
             self._collection = self._client.get_or_create_collection(
                 name=_COLLECTION_NAME,
