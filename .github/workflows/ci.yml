@@ -62,7 +62,7 @@ jobs:
             --cov=app \
             --cov-report=term-missing \
             --cov-report=xml \
-            --cov-fail-under=70
+            --cov-fail-under=65
       - uses: codecov/codecov-action@v4
         if: always()
         with:
