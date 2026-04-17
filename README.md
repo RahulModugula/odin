@@ -8,7 +8,7 @@
 
 Odin implements the [LLift (OOPSLA 2024)](https://www.cs.ucr.edu/~zhiyunq/pub/oopsla24_llift.pdf) / [INFERROI (ICSE 2025)](https://conf.researchr.org/details/icse-2025) architecture: cheap taint propagation narrows the search space, then an LLM reasons about exploitability only on real candidates. A feedback loop suppresses known false-positive (source, sink) pairs *before* the LLM runs — so cost and noise drop together over time.
 
-**0.0% false-positive rate** on 60 clean-code samples. Every number is reproducible — run `python -m bench.harness` yourself.
+**0.0% false-positive rate** on 193 clean-code samples (dataflow taint tracker) / **8.8%** (deterministic rules). Every number is reproducible — run `python -m bench.harness` yourself.
 
 ---
 
@@ -16,10 +16,10 @@ Odin implements the [LLift (OOPSLA 2024)](https://www.cs.ucr.edu/~zhiyunq/pub/oo
 
 ```bash
 # No Docker, no server, no checkout — just works (BYOK via env var)
-uvx odin review path/to/file.py
+uvx odin-review review path/to/file.py
 
 # Rules only — instant, no LLM
-uvx odin review path/to/file.py --rules-only
+uvx odin-review review path/to/file.py --rules-only
 ```
 
 Set your provider once:
@@ -61,7 +61,7 @@ Odin posts structured reviews with inline comments, severity badges, and fix sug
 | **27 deterministic rules** | Python, JS, TS, Go, Rust, Java — zero cost, instant |
 | **Learning feedback loop** | Mark a finding false-positive twice → that (source, sink) pair is suppressed before the LLM runs next time |
 | **Honest leaderboard** | Public FP-rate benchmark on 60 clean samples + CVE recall; every number reproducible |
-| **uvx one-binary install** | `uvx odin review <file>` — works from a clean machine, BYOK |
+| **uvx one-binary install** | `uvx odin-review review <file>` — works from a clean machine, BYOK |
 | **GitHub App** | One-click install, auto-registers webhook, reviews every PR |
 | **GitHub webhook** | Manual webhook setup if you prefer |
 | **MCP server** | Use Odin as a tool inside Claude Code or Cursor |
@@ -176,22 +176,22 @@ docker compose up
 
 ```bash
 # Install once (no checkout required)
-uvx odin review path/to/file.py
+uvx odin-review review path/to/file.py
 
 # Rules only — instant, no LLM, no server
-uvx odin review path/to/file.py --rules-only
+uvx odin-review review path/to/file.py --rules-only
 
 # Staged changes (pre-push check)
-uvx odin review --staged --rules-only
+uvx odin-review review --staged --rules-only
 
 # Fail CI on high+ severity
-uvx odin review --staged --fail-on high
+uvx odin-review review --staged --fail-on high
 
 # JSON output for scripting
-uvx odin review path/to/file.py --json | jq .
+uvx odin-review review path/to/file.py --json | jq .
 
 # Filter by severity and confidence
-uvx odin review backend/ --min-severity high --min-confidence 0.8
+uvx odin-review review backend/ --min-severity high --min-confidence 0.8
 ```
 
 Install as a git pre-push hook:
@@ -341,7 +341,7 @@ The honest comparison — including where CodeRabbit wins.
 | **Learning feedback loop** | ✅ suppresses FPs at generator level | ❌ | limited |
 | **GitHub App one-click install** | ✅ | ✅ | ✅ |
 | **GitHub webhook** | ✅ | ✅ | ✅ |
-| **CLI (`uvx odin review`)** | ✅ no Docker needed | ❌ | ❌ |
+| **CLI (`uvx odin-review review`)** | ✅ no Docker needed | ❌ | ❌ |
 | **PR summary & walkthrough** | ✅ | ✅ | ✅ |
 | **Inline comments** | ✅ | ✅ | ✅ |
 | **Deterministic rules** | ✅ 29 rules, 6 languages | ✅ 40+ | ✅ 40+ |

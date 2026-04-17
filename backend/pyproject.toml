@@ -1,5 +1,5 @@
 [project]
-name = "odin"
+name = "odin-review"
 version = "0.1.0"
 description = "AI-powered multi-agent code review system"
 requires-python = ">=3.12"
