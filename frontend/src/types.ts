@@ -9,7 +9,7 @@ export interface Finding {
   fix_code?: string | null;
   attack_scenario?: string | null;
   confidence: number;
-  source?: 'rule' | 'ai' | null;
+  source?: 'rule' | 'ai' | 'dataflow' | null;
 }
 
 export interface CodeMetrics {
@@ -43,7 +43,7 @@ export interface ReviewResult {
 }
 
 export interface SSEEvent {
-  type: 'agent_start' | 'finding' | 'agent_complete' | 'complete';
+  type: 'agent_start' | 'finding' | 'agent_complete' | 'complete' | 'metrics';
   agent?: string;
   data?: Finding;
   review_id?: string;
@@ -60,6 +60,8 @@ export interface AgentStatuses {
   quality: AgentStatus;
   security: AgentStatus;
   docs: AgentStatus;
+  dataflow: AgentStatus;
+  rules: AgentStatus;
 }
 
 export interface ReviewRequest {

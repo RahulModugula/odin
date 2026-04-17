@@ -33,19 +33,78 @@ const SEVERITY_CHIP_STYLES: Record<string, string> = {
   info:     'bg-gray-800 text-gray-400 ring-1 ring-gray-600/30 hover:ring-gray-500/60',
 };
 
-function countFindingsByAgent(findings: Finding[]): { quality: number; security: number; docs: number } {
-  const counts = { quality: 0, security: 0, docs: 0 };
+const SEVERITY_BAR_COLORS: Record<string, string> = {
+  critical: 'bg-red-500',
+  high: 'bg-orange-500',
+  medium: 'bg-amber-500',
+  low: 'bg-blue-500',
+  info: 'bg-gray-500',
+};
+
+function countFindingsByAgent(findings: Finding[]): { quality: number; security: number; docs: number; dataflow: number; rules: number } {
+  const counts = { quality: 0, security: 0, docs: 0, dataflow: 0, rules: 0 };
   for (const f of findings) {
-    const cat = f.category.toLowerCase();
-    if (cat.includes('security') || cat.includes('vulnerab') || cat.includes('injection') || cat.includes('auth')) {
-      counts.security++;
-    } else if (cat.includes('doc') || cat.includes('comment') || cat.includes('readme')) {
-      counts.docs++;
+    const src = f.source;
+    if (src === 'rule') {
+      counts.rules++;
+    } else if (src === 'dataflow') {
+      counts.dataflow++;
     } else {
-      counts.quality++;
+      const cat = f.category.toLowerCase();
+      if (cat.includes('security') || cat.includes('vulnerab') || cat.includes('injection') || cat.includes('auth')) {
+        counts.security++;
+      } else if (cat.includes('doc') || cat.includes('comment') || cat.includes('readme')) {
+        counts.docs++;
+      } else {
+        counts.quality++;
+      }
     }
   }
   return counts;
+}
+
+function SeverityBreakdown({ findings }: { findings: Finding[] }) {
+  const counts: Record<string, number> = {};
+  for (const f of findings) {
+    counts[f.severity] = (counts[f.severity] || 0) + 1;
+  }
+  const total = findings.length;
+  if (total === 0) return null;
+
+  const orderedSevs = ['critical', 'high', 'medium', 'low', 'info'];
+
+  return (
+    <div className="space-y-2">
+      <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Severity Breakdown</h3>
+      <div className="flex rounded-lg overflow-hidden h-3 bg-gray-800/50">
+        {orderedSevs.map(sev => {
+          const count = counts[sev] || 0;
+          if (count === 0) return null;
+          const pct = (count / total) * 100;
+          return (
+            <div
+              key={sev}
+              className={`${SEVERITY_BAR_COLORS[sev]} transition-all duration-500`}
+              style={{ width: `${pct}%` }}
+              title={`${sev}: ${count} (${Math.round(pct)}%)`}
+            />
+          );
+        })}
+      </div>
+      <div className="flex gap-3 flex-wrap">
+        {orderedSevs.map(sev => {
+          const count = counts[sev] || 0;
+          if (count === 0) return null;
+          return (
+            <span key={sev} className="text-[10px] text-gray-500 flex items-center gap-1">
+              <span className={`w-2 h-2 rounded-full ${SEVERITY_BAR_COLORS[sev]}`} />
+              {sev} {count}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export function ReviewResults({
@@ -89,7 +148,7 @@ export function ReviewResults({
           </div>
           <p className="text-red-300/70 text-xs font-mono break-all">{error}</p>
           <div className="bg-amber-950/30 border border-amber-500/15 rounded-lg px-3 py-2.5">
-            <p className="text-xs text-amber-200/80">💡 {hint}</p>
+            <p className="text-xs text-amber-200/80">{hint}</p>
           </div>
         </div>
       </div>
@@ -99,10 +158,26 @@ export function ReviewResults({
   if (!hasStarted) {
     return (
       <div className="flex items-center justify-center h-full p-8">
-        <div className="text-center space-y-3">
-          <div className="text-gray-600 text-5xl mb-4">&#x2728;</div>
-          <p className="text-gray-400 text-lg font-medium">Paste code and click Review</p>
-          <p className="text-gray-600 text-sm">Odin will analyze your code for quality, security, and documentation issues.</p>
+        <div className="text-center space-y-4 max-w-sm">
+          <div className="w-16 h-16 rounded-2xl bg-indigo-600/20 border border-indigo-500/20 flex items-center justify-center mx-auto">
+            <svg className="w-8 h-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+          </div>
+          <div>
+            <p className="text-gray-300 text-lg font-semibold">Paste code and click Review</p>
+            <p className="text-gray-500 text-sm mt-1">
+              Odin analyzes your code with 5 parallel agents: quality, security, docs, dataflow taint tracking, and deterministic rules.
+            </p>
+          </div>
+          <div className="flex flex-wrap justify-center gap-2 pt-2">
+            <span className="text-[10px] px-2 py-1 rounded bg-gray-800 text-gray-500 border border-gray-700/50">Python</span>
+            <span className="text-[10px] px-2 py-1 rounded bg-gray-800 text-gray-500 border border-gray-700/50">JavaScript</span>
+            <span className="text-[10px] px-2 py-1 rounded bg-gray-800 text-gray-500 border border-gray-700/50">TypeScript</span>
+            <span className="text-[10px] px-2 py-1 rounded bg-gray-800 text-gray-500 border border-gray-700/50">Go</span>
+            <span className="text-[10px] px-2 py-1 rounded bg-gray-800 text-gray-500 border border-gray-700/50">Rust</span>
+            <span className="text-[10px] px-2 py-1 rounded bg-gray-800 text-gray-500 border border-gray-700/50">Java</span>
+          </div>
         </div>
       </div>
     );
@@ -113,7 +188,6 @@ export function ReviewResults({
   );
   const findingCounts = countFindingsByAgent(findings);
 
-  // Counts per severity for filter chip labels
   const severityCounts = sortedFindings.reduce<Record<string, number>>((acc, f) => {
     acc[f.severity] = (acc[f.severity] ?? 0) + 1;
     return acc;
@@ -132,16 +206,30 @@ export function ReviewResults({
           <ScoreGauge score={score} />
           <div className="flex-1 min-w-0 space-y-3">
             {summary && <p className="text-sm text-gray-300 leading-relaxed">{summary}</p>}
-            {totalTime !== null && (
-              <p className="text-xs text-gray-600">
-                Completed in {(totalTime / 1000).toFixed(1)}s
-              </p>
-            )}
+            <div className="flex items-center gap-3 flex-wrap">
+              {totalTime !== null && (
+                <span className="text-xs text-gray-600">
+                  {(totalTime / 1000).toFixed(1)}s
+                </span>
+              )}
+              {findings.length > 0 && (
+                <span className="text-xs text-gray-600">
+                  {findings.length} finding{findings.length !== 1 ? 's' : ''}
+                </span>
+              )}
+              {metrics && (
+                <span className="text-xs text-gray-600">
+                  {metrics.lines_of_code} LOC
+                </span>
+              )}
+            </div>
           </div>
         </div>
       )}
 
       {metrics && <MetricsPanel metrics={metrics} />}
+
+      {findings.length > 1 && <SeverityBreakdown findings={findings} />}
 
       {sortedFindings.length > 0 && (
         <div className="space-y-3">

@@ -1,4 +1,5 @@
-import { type ChangeEvent, type KeyboardEvent, useState } from 'react';
+import { type ChangeEvent, type DragEvent, useState, useCallback } from 'react';
+import { CodeMirrorEditor } from './CodeMirrorEditor';
 
 interface CodeInputProps {
   code: string;
@@ -166,18 +167,23 @@ public class UserService {
   ],
 };
 
+const EXT_TO_LANG: Record<string, CodeInputProps['language']> = {
+  py: 'python',
+  js: 'javascript',
+  jsx: 'javascript',
+  ts: 'typescript',
+  tsx: 'typescript',
+  go: 'go',
+  rs: 'rust',
+  java: 'java',
+};
+
 export function CodeInput({ code, language, isLoading, onCodeChange, onLanguageChange, onSubmit }: CodeInputProps) {
   const [sampleOpen, setSampleOpen] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   const handleLanguageChange = (e: ChangeEvent<HTMLSelectElement>) => {
     onLanguageChange(e.target.value as CodeInputProps['language']);
-  };
-
-  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      e.preventDefault();
-      onSubmit();
-    }
   };
 
   const currentSamples = SAMPLE_CODE[language] || [];
@@ -187,6 +193,35 @@ export function CodeInput({ code, language, isLoading, onCodeChange, onLanguageC
     onCodeChange(sample.code);
     setSampleOpen(false);
   };
+
+  const handleDrop = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const detectedLang = ext ? EXT_TO_LANG[ext] : null;
+    if (detectedLang) {
+      onLanguageChange(detectedLang);
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = ev.target?.result;
+      if (typeof text === 'string') {
+        onCodeChange(text);
+      }
+    };
+    reader.readAsText(file);
+  }, [onCodeChange, onLanguageChange]);
+
+  const handleDragOver = useCallback((e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setIsDragOver(false);
+  }, []);
 
   return (
     <div className="flex flex-col h-full gap-3">
@@ -264,18 +299,36 @@ export function CodeInput({ code, language, isLoading, onCodeChange, onLanguageC
         </button>
       </div>
 
-      {/* Code textarea */}
-      <div className="relative flex-1 min-h-0" onClick={() => setSampleOpen(false)}>
-        <textarea
-          value={code}
-          onChange={e => onCodeChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder="Paste your code here, or choose a sample above..."
-          spellCheck={false}
-          className="w-full h-full bg-gray-950 text-gray-200 border border-gray-700/50 rounded-xl p-4 font-mono text-sm leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 placeholder:text-gray-600 scrollbar-thin"
+      {/* Editor area with drag-and-drop */}
+      <div
+        className="relative flex-1 min-h-0"
+        onClick={() => setSampleOpen(false)}
+        onDrop={handleDrop}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+      >
+        <CodeMirrorEditor
+          code={code}
+          language={language}
+          onChange={onCodeChange}
+          onSubmit={onSubmit}
+          placeholder="Paste your code here, drag & drop a file, or choose a sample above..."
         />
+
+        {/* Drag overlay */}
+        {isDragOver && (
+          <div className="absolute inset-0 z-20 bg-indigo-950/80 border-2 border-dashed border-indigo-500 rounded-xl flex items-center justify-center">
+            <div className="text-center">
+              <svg className="w-10 h-10 text-indigo-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
+              <p className="text-indigo-300 font-medium text-sm">Drop file to review</p>
+            </div>
+          </div>
+        )}
+
         {code.length > 0 && (
-          <div className="absolute bottom-3 right-4 text-xs text-gray-600 font-mono pointer-events-none">
+          <div className="absolute bottom-3 right-4 text-xs text-gray-600 font-mono pointer-events-none z-10">
             {code.split('\n').length} lines
           </div>
         )}

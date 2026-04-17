@@ -246,7 +246,9 @@ async def stream_review(request: ReviewRequest) -> StreamingResponse:
             name = event.get("name", "")
 
             _agent_names = ("quality_agent", "security_agent", "docs_agent")
-            if kind == "on_chain_start" and name in _agent_names:
+            _extra_agents = ("dataflow_triage", "run_rules")
+            _all_agents = _agent_names + _extra_agents
+            if kind == "on_chain_start" and name in _all_agents:
                 sse_data = json.dumps({"type": "agent_start", "agent": name})
                 yield f"data: {sse_data}\n\n"
 
@@ -256,7 +258,7 @@ async def stream_review(request: ReviewRequest) -> StreamingResponse:
                 for finding in findings:
                     finding_data = (
                         finding.model_dump() if hasattr(finding, "model_dump") else finding
-                    )  # noqa: E501
+                    )
                     sse_data = json.dumps({"type": "finding", "agent": name, "data": finding_data})
                     yield f"data: {sse_data}\n\n"
 
@@ -269,18 +271,49 @@ async def stream_review(request: ReviewRequest) -> StreamingResponse:
                 )
                 yield f"data: {sse_data}\n\n"
 
+            elif kind == "on_chain_end" and name in _extra_agents:
+                extra_output: dict[str, Any] = event.get("data", {}).get("output", {})
+                extra_findings = extra_output.get("findings", [])
+                for finding in extra_findings:
+                    finding_data = (
+                        finding.model_dump() if hasattr(finding, "model_dump") else finding
+                    )
+                    sse_data = json.dumps({"type": "finding", "agent": name, "data": finding_data})
+                    yield f"data: {sse_data}\n\n"
+
+                sse_data = json.dumps(
+                    {
+                        "type": "agent_complete",
+                        "agent": name,
+                        "findings_count": len(extra_findings),
+                    }
+                )
+                yield f"data: {sse_data}\n\n"
+
+            elif kind == "on_chain_end" and name == "parse_code":
+                parse_output: dict[str, Any] = event.get("data", {}).get("output", {})
+                metrics_data = parse_output.get("metrics")
+                if metrics_data is not None:
+                    metrics_payload = (
+                        metrics_data.model_dump()
+                        if hasattr(metrics_data, "model_dump")
+                        else metrics_data
+                    )
+                    sse_data = json.dumps({"type": "metrics", "metrics": metrics_payload})
+                    yield f"data: {sse_data}\n\n"
+
             elif kind == "on_chain_end" and name == "synthesize":
-                output: dict[str, Any] = event.get("data", {}).get("output", {})  # type: ignore[no-redef]
+                synth_output: dict[str, Any] = event.get("data", {}).get("output", {})
                 elapsed_ms = (time.perf_counter() - start) * 1000
 
                 complete_data = {
                     "type": "complete",
                     "review_id": review_id,
-                    "overall_score": output.get("overall_score", 0),
-                    "summary": output.get("summary", ""),
+                    "overall_score": synth_output.get("overall_score", 0),
+                    "summary": synth_output.get("summary", ""),
                     "total_time_ms": round(elapsed_ms, 2),
                 }
-                final_output = output
+                final_output = synth_output
                 sse_data = json.dumps(complete_data)
                 yield f"data: {sse_data}\n\n"
 

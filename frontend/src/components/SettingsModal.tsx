@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 interface Provider {
   name: string;
@@ -59,11 +59,6 @@ export function SettingsModal({ isOpen, onClose, currentProvider, onProviderChan
   const [customModel, setCustomModel] = useState('');
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
   const [testError, setTestError] = useState('');
-
-  useEffect(() => {
-    setSelected(currentProvider || 'lmstudio');
-    setTestStatus('idle');
-  }, [currentProvider, isOpen]);
 
   const preset = PRESETS[selected] || PRESETS.lmstudio;
 

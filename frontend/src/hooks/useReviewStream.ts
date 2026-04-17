@@ -19,6 +19,8 @@ const AGENT_NAME_MAP: Record<string, keyof AgentStatuses> = {
   security: 'security',
   docs: 'docs',
   documentation: 'docs',
+  dataflow_triage: 'dataflow',
+  run_rules: 'rules',
 };
 
 function resolveAgentKey(name: string): keyof AgentStatuses | null {
@@ -35,6 +37,8 @@ export function useReviewStream(request: ReviewRequest): UseReviewStreamReturn {
     quality: 'pending',
     security: 'pending',
     docs: 'pending',
+    dataflow: 'pending',
+    rules: 'pending',
   });
   const [score, setScore] = useState<number | null>(null);
   const [summary, setSummary] = useState<string | null>(null);
@@ -46,7 +50,7 @@ export function useReviewStream(request: ReviewRequest): UseReviewStreamReturn {
 
   const reset = useCallback(() => {
     setFindings([]);
-    setAgentStatuses({ quality: 'pending', security: 'pending', docs: 'pending' });
+    setAgentStatuses({ quality: 'pending', security: 'pending', docs: 'pending', dataflow: 'pending', rules: 'pending' });
     setScore(null);
     setSummary(null);
     setError(null);
@@ -64,7 +68,7 @@ export function useReviewStream(request: ReviewRequest): UseReviewStreamReturn {
     abortRef.current = controller;
 
     setFindings([]);
-    setAgentStatuses({ quality: 'pending', security: 'pending', docs: 'pending' });
+    setAgentStatuses({ quality: 'pending', security: 'pending', docs: 'pending', dataflow: 'pending', rules: 'pending' });
     setScore(null);
     setSummary(null);
     setError(null);
@@ -135,7 +139,11 @@ export function useReviewStream(request: ReviewRequest): UseReviewStreamReturn {
                 if (event.summary) setSummary(event.summary);
                 if (event.total_time_ms !== undefined) setTotalTime(event.total_time_ms);
                 if (event.metrics) setMetrics(event.metrics);
-                setAgentStatuses({ quality: 'complete', security: 'complete', docs: 'complete' });
+                setAgentStatuses({ quality: 'complete', security: 'complete', docs: 'complete', dataflow: 'complete', rules: 'complete' });
+                break;
+              }
+              case 'metrics': {
+                if (event.metrics) setMetrics(event.metrics);
                 break;
               }
             }

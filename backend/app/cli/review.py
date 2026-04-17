@@ -317,14 +317,24 @@ def print_findings(findings: list[dict]) -> int:  # type: ignore[type-arg]
         col_fn = SEVERITY_COLOR.get(sev, _identity)
         src = dim(f"[{f.get('source', '?')}]")
         line = f"  line {f['line_start']}" if f.get("line_start") else ""
+        confidence = f.get("confidence")
+        conf_str = f" ({int(confidence * 100)}%)" if confidence else ""
 
-        print(f"  {icon} {col_fn(sev.upper())} {src} {bold(f['title'])}{dim(line)}")
+        print(f"  {icon} {col_fn(sev.upper())} {src} {bold(f['title'])}{dim(line)}{dim(conf_str)}")
         desc = f.get("description", "")
         if desc:
-            print(f"     {desc[:120]}")
+            for dline in desc.split("\n")[:3]:
+                print(f"     {dim(dline[:120])}")
         sug = f.get("suggestion", "")
         if sug:
             print(f"     {cyan('→')} {sug[:100]}")
+        fix = f.get("fix_code")
+        if fix:
+            print(f"     {green('Fix:')}")
+            for fix_line in fix.split("\n")[:5]:
+                print(f"       {green('+')} {fix_line}")
+            if fix.count("\n") > 5:
+                print(f"       {dim('...')}")
         print()
 
         if sev in ("critical", "high"):
@@ -806,16 +816,27 @@ def _run_review(args: argparse.Namespace) -> None:
     # ---- summary ----
     if all_findings:
         counts: dict[str, int] = {}
+        sources: dict[str, int] = {}
         for f in all_findings:
             sev = f.get("severity", "info")
             counts[sev] = counts.get(sev, 0) + 1
+            src = f.get("source", "unknown")
+            sources[src] = sources.get(src, 0) + 1
 
         if not args.quiet:
+            print(bold(f"\n{'─' * 50}"))
             print(bold(f"Summary: {len(all_findings)} finding(s) in {len(files)} file(s)"))
+            print(f"{dim('─' * 50)}")
             for sev in SEVERITY_ORDER:
                 if counts.get(sev):
                     col = SEVERITY_COLOR.get(sev, _identity)
-                    print(f"  {col(sev)}: {counts[sev]}")
+                    bar = "█" * counts[sev]
+                    print(f"  {col(f'{sev:>8}')}: {counts[sev]:>2}  {dim(bar)}")
+            if sources:
+                print(f"{dim('─' * 50)}")
+                src_parts = [f"{dim(k)}: {v}" for k, v in sorted(sources.items())]
+                print(f"  By source: {', '.join(src_parts)}")
+            print(f"{dim('─' * 50)}")
 
         if args.json:
             print("\n" + json.dumps(all_findings, indent=2))
