@@ -13,7 +13,7 @@ concurrency:
 jobs:
   # ── Backend ────────────────────────────────────────────────────────────────
   backend-lint:
-    name: Backend lint
+    name: Backend lint + type-check
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -27,6 +27,7 @@ jobs:
       - run: uv sync --dev
       - run: uv run ruff check app/ tests/ --output-format=github
       - run: uv run ruff format --check app/ tests/
+      - run: uv run mypy app/ --ignore-missing-imports
 
   backend-test:
     name: Backend tests
@@ -61,7 +62,7 @@ jobs:
             --cov=app \
             --cov-report=term-missing \
             --cov-report=xml \
-            --cov-fail-under=60
+            --cov-fail-under=70
       - uses: codecov/codecov-action@v4
         if: always()
         with:
