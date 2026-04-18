@@ -115,6 +115,8 @@ class EvalUsageRule(Rule):
             stripped = line.strip()
             if stripped.startswith("#"):
                 continue
+            if any(kw in stripped for kw in ("re.compile", "regex", "pattern", "match", "search")):
+                continue
             m = self._pattern.search(line)
             if m:
                 func = m.group(1)
@@ -201,6 +203,10 @@ class SqlStringFormattingRule(Rule):
 
     _sql_pattern = re.compile(r"(?i)(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE)\s")
     _format_pattern = re.compile(r"(%s|%d|\{[^}]*\}|f[\"'].*\{)")
+    _concat_pattern = re.compile(
+        r"""['"][^'"]*(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE)\s[^'"]*['"]""", re.IGNORECASE
+    )
+    _plus_var = re.compile(r"""\+\s*[a-zA-Z_]\w*""")
 
     def check(
         self,
@@ -212,28 +218,50 @@ class SqlStringFormattingRule(Rule):
         findings: list[Finding] = []
         lines = code.splitlines()
         for i, line in enumerate(lines, 1):
-            if self._sql_pattern.search(line) and self._format_pattern.search(line):
-                prev_line = lines[i - 2] if i > 1 else ""
-                if "execute" in line or "query" in line.lower() or "execute" in prev_line:
-                    findings.append(
-                        Finding(
-                            severity=self.severity,
-                            category=self.category,
-                            title="Potential SQL injection via string formatting",
-                            description=(
-                                f"Line {i}: SQL query appears to be built using string "
-                                "formatting. CWE-89."
-                            ),
-                            line_start=i,
-                            line_end=i,
-                            suggestion=(
-                                "Use parameterized queries: "
-                                "`cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))`"
-                            ),
-                            fix_code='cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))',
-                            confidence=0.8,
-                        )
-                    )
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+
+            has_sql = self._sql_pattern.search(line)
+            if not has_sql:
+                continue
+
+            is_parameterized = bool(
+                re.search(r"execute\s*\([^)]*%s[^)]*,\s*\(", line)
+                or re.search(r"execute\s*\([^)]*,\s*\(", line)
+            )
+            if is_parameterized:
+                continue
+
+            has_format = self._format_pattern.search(line)
+            has_concat_sql = self._plus_var.search(line)
+
+            if has_format:
+                confidence = 0.85
+            elif has_concat_sql:
+                confidence = 0.78
+            else:
+                continue
+
+            findings.append(
+                Finding(
+                    severity=self.severity,
+                    category=self.category,
+                    title="Potential SQL injection via string formatting",
+                    description=(
+                        f"Line {i}: SQL query appears to be built using string "
+                        "formatting or concatenation. CWE-89."
+                    ),
+                    line_start=i,
+                    line_end=i,
+                    suggestion=(
+                        "Use parameterized queries: "
+                        "`cursor.execute('SELECT * FROM users WHERE id = %s', (user_id,))`"
+                    ),
+                    fix_code='cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))',
+                    confidence=confidence,
+                )
+            )
         return findings
 
 

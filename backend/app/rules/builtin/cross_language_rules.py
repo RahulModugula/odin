@@ -135,6 +135,7 @@ class MagicNumberRule(Rule):
         50000,
     }
     _pattern = re.compile(r'(?<!["\'\w.])(\d{3,})\b(?!["\'])')
+    _doc_line_pattern = re.compile(r"(?i)(CWE|CVE|OWASP|RFC)\s*[-–]?\s*\d")
 
     def check(
         self,
@@ -144,11 +145,15 @@ class MagicNumberRule(Rule):
         structure: object = None,
     ) -> list[Finding]:
         findings: list[Finding] = []
-        for i, line in enumerate(code.splitlines(), 1):
+        lines = code.splitlines()
+        for i, line in enumerate(lines, 1):
             stripped = line.strip()
             if stripped.startswith("#") or stripped.startswith("//") or stripped.startswith("*"):
                 continue
             if "import" in stripped or '"""' in stripped or "'''" in stripped:
+                continue
+            neighbor_window = "\n".join(lines[max(0, i - 3) : min(len(lines), i + 2)])
+            if self._doc_line_pattern.search(neighbor_window):
                 continue
             for m in self._pattern.finditer(line):
                 val = int(m.group(1))
@@ -188,6 +193,9 @@ class MagicNumberRule(Rule):
                         "ok =",
                         "created =",
                         "bad",
+                        "cwe",
+                        "cve",
+                        "owasp",
                     ]
                 ):
                     continue
