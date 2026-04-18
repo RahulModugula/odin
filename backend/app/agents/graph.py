@@ -256,6 +256,8 @@ def fan_out_to_agents(state: ReviewState) -> list[Send]:
         agent_input["changed_lines"] = state["changed_lines"]
     if "pr_context" in state and state["pr_context"]:
         agent_input["pr_context"] = state["pr_context"]
+    if state.get("ai_generated"):
+        agent_input["ai_generated"] = True
     return [
         Send("quality_agent", agent_input),
         Send("security_agent", agent_input),
@@ -512,9 +514,13 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
         llm = get_llm()
         verdicts = await triage_all(candidates, llm)
 
+        # AI-generated code has a much higher base rate of real issues, so we lower
+        # the confidence floor to catch findings the LLM triages as "plausible".
+        confidence_floor = 0.45 if state.get("ai_generated") else TRIAGE_CONFIDENCE_FLOOR
+
         findings: list[Finding] = []
         for candidate, verdict in zip(candidates, verdicts, strict=False):
-            if not verdict.exploitable or verdict.confidence < TRIAGE_CONFIDENCE_FLOOR:
+            if not verdict.exploitable or verdict.confidence < confidence_floor:
                 continue
             findings.append(
                 Finding(

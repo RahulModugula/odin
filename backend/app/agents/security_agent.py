@@ -63,6 +63,7 @@ async def run_security_agent(
             diff=state.get("diff", ""),
             changed_lines=state.get("changed_lines"),
             pr_context=state.get("pr_context"),
+            ai_generated=bool(state.get("ai_generated", False)),
         )
         messages = [
             SystemMessage(content=SECURITY_SYSTEM_PROMPT),

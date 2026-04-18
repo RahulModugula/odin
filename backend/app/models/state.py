@@ -19,6 +19,7 @@ class ReviewState(TypedDict):
     changed_lines: NotRequired[list[tuple[int, int]]]
     pr_context: NotRequired[dict[str, Any]]
     pr_context_files: NotRequired[dict[str, list[str]]]
+    ai_generated: NotRequired[bool]  # lowers confidence floor + reshapes prompts
 
 
 class AgentInput(TypedDict):
@@ -30,3 +31,4 @@ class AgentInput(TypedDict):
     diff: NotRequired[str]  # unified diff patch — agents focus on changed lines
     changed_lines: NotRequired[list[tuple[int, int]]]  # [(start, end), ...]
     pr_context: NotRequired[dict[str, Any]]  # PR title, description, author
+    ai_generated: NotRequired[bool]  # signal that the code under review was AI-produced
