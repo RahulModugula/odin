@@ -7,6 +7,7 @@ import pytest
 from app.models.enums import Category, Language, Severity
 from app.models.schemas import CodeMetrics, Finding, ReviewResult
 from app.services.webhook_processor import (
+    _apply_noise_budget,
     _build_inline_comments,
     _build_review_body,
     detect_language,
@@ -246,3 +247,93 @@ async def test_process_pr_webhook_no_qualifying_files(monkeypatch: pytest.Monkey
     mock_post.assert_called_once()
     call_kwargs = mock_post.call_args.kwargs
     assert "No files" in call_kwargs["body"] or "No files" in str(mock_post.call_args)
+
+
+# ── Noise budget ─────────────────────────────────────────────────────────────
+
+
+def _finding(severity: Severity, confidence: float, title: str = "x") -> Finding:
+    return Finding(
+        severity=severity,
+        category=Category.SECURITY,
+        title=title,
+        description="",
+        line_start=1,
+        confidence=confidence,
+    )
+
+
+def _review_with(findings: list[Finding]) -> ReviewResult:
+    return ReviewResult(
+        metrics=CodeMetrics(
+            lines_of_code=10,
+            num_functions=1,
+            num_classes=0,
+            avg_function_length=10.0,
+            max_function_length=10,
+            max_nesting_depth=1,
+            cyclomatic_complexity=1,
+            comment_ratio=0.0,
+            import_count=0,
+        ),
+        findings=findings,
+        language=Language.PYTHON,
+    )
+
+
+def test_noise_budget_disabled_returns_zero() -> None:
+    r = _review_with([_finding(Severity.HIGH, 0.9)] * 20)
+    suppressed = _apply_noise_budget([("a.py", r)], max_findings=0)
+    assert suppressed == 0
+    assert len(r.findings) == 20
+
+
+def test_noise_budget_keeps_top_n_by_severity() -> None:
+    r = _review_with(
+        [
+            _finding(Severity.LOW, 0.9, "low-a"),
+            _finding(Severity.CRITICAL, 0.5, "crit"),
+            _finding(Severity.HIGH, 0.9, "high"),
+            _finding(Severity.MEDIUM, 0.9, "med"),
+        ]
+    )
+    suppressed = _apply_noise_budget([("a.py", r)], max_findings=2)
+    assert suppressed == 2
+    kept_titles = {f.title for f in r.findings}
+    assert kept_titles == {"crit", "high"}
+
+
+def test_noise_budget_breaks_ties_by_confidence() -> None:
+    r = _review_with(
+        [
+            _finding(Severity.HIGH, 0.7, "low-conf"),
+            _finding(Severity.HIGH, 0.95, "high-conf"),
+        ]
+    )
+    suppressed = _apply_noise_budget([("a.py", r)], max_findings=1)
+    assert suppressed == 1
+    assert r.findings[0].title == "high-conf"
+
+
+def test_noise_budget_spans_multiple_files() -> None:
+    r1 = _review_with([_finding(Severity.LOW, 0.9, f"a{i}") for i in range(5)])
+    r2 = _review_with([_finding(Severity.CRITICAL, 0.9, f"b{i}") for i in range(3)])
+    suppressed = _apply_noise_budget([("a.py", r1), ("b.py", r2)], max_findings=3)
+    assert suppressed == 5
+    # All 3 critical kept, all 5 low dropped
+    assert len(r1.findings) == 0
+    assert len(r2.findings) == 3
+
+
+def test_noise_budget_handles_none_result() -> None:
+    r = _review_with([_finding(Severity.HIGH, 0.9)] * 3)
+    suppressed = _apply_noise_budget([("a.py", r), ("b.py", None)], max_findings=2)
+    assert suppressed == 1
+    assert len(r.findings) == 2
+
+
+def test_noise_budget_noop_when_under_limit() -> None:
+    r = _review_with([_finding(Severity.HIGH, 0.9)] * 3)
+    suppressed = _apply_noise_budget([("a.py", r)], max_findings=10)
+    assert suppressed == 0
+    assert len(r.findings) == 3

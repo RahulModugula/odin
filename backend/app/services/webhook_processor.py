@@ -106,6 +106,8 @@ async def _review_single_file(
     language: Language,
     patch: str | None = None,
     changed_lines: list[tuple[int, int]] | None = None,
+    pr_context: dict[str, Any] | None = None,
+    ai_generated: bool = False,
 ) -> ReviewResult | None:
     """Fetch and review a single file. Returns None on any error."""
     try:
@@ -127,8 +129,10 @@ async def _review_single_file(
             "file_path": filename,
             "diff": patch or "",
             "changed_lines": changed_lines or [],
-            "pr_context": {},
+            "pr_context": pr_context or {},
         }
+        if ai_generated:
+            state["ai_generated"] = True
         result: dict[str, Any] = await review_graph.ainvoke(state, config={"callbacks": []})  # type: ignore[call-overload]
 
         return ReviewResult(
@@ -153,6 +157,51 @@ def _severity_sort_key(s: Severity) -> int:
         Severity.INFO: 4,
     }
     return order.get(s, 99)
+
+
+def _apply_noise_budget(
+    file_results: list[tuple[str, ReviewResult | None]],
+    max_findings: int,
+) -> int:
+    """Cap total findings across the PR at max_findings, keeping highest severity + confidence.
+
+    Mutates each ReviewResult.findings in-place. Returns the number of findings suppressed.
+    When max_findings <= 0 the budget is disabled and this returns 0.
+    """
+    if max_findings <= 0:
+        return 0
+
+    flat: list[tuple[int, int, Finding]] = []  # (file_idx, finding_idx, finding)
+    for file_idx, (_filename, result) in enumerate(file_results):
+        if result is None:
+            continue
+        for f_idx, finding in enumerate(result.findings):
+            flat.append((file_idx, f_idx, finding))
+
+    if len(flat) <= max_findings:
+        return 0
+
+    flat.sort(
+        key=lambda triple: (
+            _severity_sort_key(triple[2].severity),
+            -triple[2].confidence,
+            triple[2].line_start or 999_999,
+        )
+    )
+
+    kept = {(fi, i) for fi, i, _ in flat[:max_findings]}
+    suppressed = 0
+    for file_idx, (_filename, result) in enumerate(file_results):
+        if result is None:
+            continue
+        new_findings: list[Finding] = []
+        for i, finding in enumerate(result.findings):
+            if (file_idx, i) in kept:
+                new_findings.append(finding)
+            else:
+                suppressed += 1
+        result.findings = new_findings
+    return suppressed
 
 
 def _build_review_body(
@@ -422,6 +471,16 @@ async def process_pr_webhook(
     except Exception as exc:
         log.warning("pr summary generation failed, continuing without it", error=str(exc))
 
+    # Auto-detect AI-generated PRs from title/body for tighter review posture
+    from app.agents.prompts import detect_ai_generated
+
+    ai_generated_pr = detect_ai_generated(
+        pr_details.get("title", ""),
+        pr_details.get("body", "") or "",
+    )
+    if ai_generated_pr:
+        log.info("pr detected as ai-generated — enabling validator mode")
+
     # Fan out: review all files concurrently, passing diff context
     tasks = [
         _review_single_file(
@@ -432,6 +491,8 @@ async def process_pr_webhook(
             detect_language(f["filename"]),  # type: ignore[arg-type]
             patch=f.get("patch"),
             changed_lines=_parse_changed_lines(f.get("patch")),
+            pr_context=pr_details,
+            ai_generated=ai_generated_pr,
         )
         for f in qualifying
     ]
@@ -440,6 +501,9 @@ async def process_pr_webhook(
     file_results: list[tuple[str, ReviewResult | None]] = [
         (f["filename"], result) for f, result in zip(qualifying, results, strict=True)
     ]
+
+    # Apply noise budget across the whole PR: rank by (severity, confidence) and keep top-N.
+    noise_suppressed = _apply_noise_budget(file_results, settings.max_findings)
 
     # Build review body with PR summary
     review_body = _build_review_body(
@@ -451,6 +515,12 @@ async def process_pr_webhook(
         review_body += (
             f"\n\n> ⚠️ {skipped_count} additional file(s) were not reviewed "
             f"(PR exceeds {MAX_FILES_PER_PR}-file limit)."
+        )
+    if noise_suppressed > 0:
+        review_body += (
+            f"\n\n> 🔇 {noise_suppressed} finding(s) suppressed by noise budget "
+            f"(showing top {settings.max_findings} by severity + confidence). "
+            f"Adjust via `max_findings` in `.odin.yml` or `ODIN_MAX_FINDINGS`."
         )
 
     # Build inline comments

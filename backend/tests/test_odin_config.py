@@ -201,3 +201,14 @@ def test_load_config_config_path_populated(tmp_path: Path) -> None:
     cfg = load_config(tmp_path)
     assert cfg.config_path is not None
     assert cfg.config_path.name == ".odin.yml"
+
+
+def test_load_config_max_findings(tmp_path: Path) -> None:
+    (tmp_path / ".odin.yml").write_text("max_findings: 7\n")
+    cfg = load_config(tmp_path)
+    assert cfg.max_findings == 7
+
+
+def test_load_config_max_findings_defaults_to_zero(tmp_path: Path) -> None:
+    cfg = load_config(tmp_path)
+    assert cfg.max_findings == 0

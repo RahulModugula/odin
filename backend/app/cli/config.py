@@ -64,6 +64,7 @@ class OdinConfig:
     min_severity: str = "low"
     fail_on: str = "high"
     min_confidence: float = 0.0
+    max_findings: int = 0  # 0 = unlimited; otherwise keep top-N by (severity, confidence)
     quality_gate: QualityGate = field(default_factory=QualityGate)
     ignore: list[IgnoreRule] = field(default_factory=list)
     exclude: list[str] = field(default_factory=list)
@@ -99,6 +100,7 @@ def _parse_config(data: dict, config_path: Path) -> OdinConfig:  # type: ignore[
         min_severity=str(data.get("min_severity", "low")),
         fail_on=str(data.get("fail_on", "high")),
         min_confidence=float(data.get("min_confidence", 0.0)),
+        max_findings=int(data.get("max_findings", 0) or 0),
         quality_gate=QualityGate.from_dict(qg_data) if isinstance(qg_data, dict) else QualityGate(),
         ignore=ignore,
         exclude=[str(e) for e in data.get("exclude", [])],

@@ -258,7 +258,9 @@ def run_full_review(code: str, language_str: str, filename: str) -> list[dict]: 
         return run_rules_only(code, language_str)
 
 
-def run_local_review(code: str, language_str: str, filename: str) -> list[dict[str, Any]]:
+def run_local_review(
+    code: str, language_str: str, filename: str, ai_generated: bool = False
+) -> list[dict[str, Any]]:
     """Run full LangGraph pipeline in-process (no running server required)."""
     import asyncio
 
@@ -278,6 +280,8 @@ def run_local_review(code: str, language_str: str, filename: str) -> list[dict[s
             "codebase_context": "",
             "file_path": filename,
         }
+        if ai_generated:
+            state["ai_generated"] = True
 
         result = asyncio.get_event_loop().run_until_complete(
             review_graph.ainvoke(state, config={"callbacks": []})  # type: ignore[call-overload]
@@ -661,6 +665,18 @@ Examples:
         action="store_true",
         help="Ignore .odin.yml project config",
     )
+    review.add_argument(
+        "--max-findings",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Noise budget: keep only the top N findings (severity DESC, confidence DESC)",
+    )
+    review.add_argument(
+        "--ai-generated",
+        action="store_true",
+        help="Treat code as AI-generated (lowers confidence threshold, adjusts prompts)",
+    )
 
     # ---- fix subcommand ----
     fix_p = sub.add_parser(
@@ -717,6 +733,10 @@ def _run_review(args: argparse.Namespace) -> None:
         if args.min_confidence is not None
         else (cfg.min_confidence if cfg else 0.0)
     )
+    max_findings: int = (
+        args.max_findings if args.max_findings is not None else (cfg.max_findings if cfg else 0)
+    )
+    ai_generated: bool = bool(getattr(args, "ai_generated", False))
 
     if args.staged:
         files = get_staged_files()
@@ -775,7 +795,7 @@ def _run_review(args: argparse.Namespace) -> None:
         if getattr(args, "rules_only", False):
             findings = run_rules_only(code, lang)
         elif getattr(args, "local", False):
-            findings = run_local_review(code, lang, str(filepath))
+            findings = run_local_review(code, lang, str(filepath), ai_generated=ai_generated)
         else:
             findings = run_full_review(code, lang, str(filepath))
 
@@ -807,6 +827,20 @@ def _run_review(args: argparse.Namespace) -> None:
             if scores:
                 file_scores.append(min(scores))
 
+    # ---- noise budget: keep top-N by (severity, confidence) ----
+    suppressed_count = 0
+    if max_findings > 0 and len(all_findings) > max_findings:
+        # Sort by severity (critical first), then confidence DESC, then line ASC
+        all_findings.sort(
+            key=lambda f: (
+                SEVERITY_ORDER.index(f.get("severity", "info")),
+                -float(f.get("confidence") or 0.0),
+                f.get("line_start") or 999999,
+            )
+        )
+        suppressed_count = len(all_findings) - max_findings
+        all_findings = all_findings[:max_findings]
+
     # ---- SARIF output (early return) ----
     if args.sarif:
         sarif = _to_sarif(all_findings, files)
@@ -825,7 +859,10 @@ def _run_review(args: argparse.Namespace) -> None:
 
         if not args.quiet:
             print(bold(f"\n{'─' * 50}"))
-            print(bold(f"Summary: {len(all_findings)} finding(s) in {len(files)} file(s)"))
+            header = f"Summary: {len(all_findings)} finding(s) in {len(files)} file(s)"
+            if suppressed_count:
+                header += f" — {suppressed_count} suppressed by noise budget"
+            print(bold(header))
             print(f"{dim('─' * 50)}")
             for sev in SEVERITY_ORDER:
                 if counts.get(sev):
