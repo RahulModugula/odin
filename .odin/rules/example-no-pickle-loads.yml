@@ -1,0 +1,29 @@
+# Example custom rule. Safe to delete if you don't need it.
+#
+# Drop YAML files in .odin/rules/ to extend Odin's static checks without
+# writing Python. Each rule runs alongside the built-in rules and respects
+# the same severity filters + noise budget.
+#
+# See docs: vscode-extension/README.md / app/rules/custom_loader.py
+
+id: EXAMPLE001
+name: "Unsafe pickle.loads() on untrusted data"
+description: |
+  pickle.loads() on attacker-controlled bytes is remote code execution (CWE-502).
+  Use json, msgpack, or a typed schema library instead.
+severity: critical
+category: security
+languages: [python]
+
+match:
+  any_of:
+    - "pickle.loads("
+    - "cPickle.loads("
+
+# Don't fire inside tests — it's common to round-trip pickled objects in fixtures
+exclude_paths:
+  - "tests/"
+  - "conftest.py"
+  - "fixtures/"
+
+message: "pickle.loads() is unsafe on untrusted input. Replace with json.loads or a typed schema validator."

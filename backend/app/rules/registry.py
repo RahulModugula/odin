@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import contextlib
+from pathlib import Path
+
 from app.rules.builtin import (
     cross_language_rules,
     go_rules,
@@ -11,11 +14,15 @@ from app.rules.builtin import (
     python_rules,
     rust_rules,
 )
+from app.rules.custom_loader import register_custom_rules
 from app.rules.engine import rule_engine
 
 
 def register_all() -> None:
-    """Register every built-in rule.  Idempotent — safe to call more than once."""
+    """Register every built-in rule plus any ``.odin/rules/*.yml`` custom rules.
+
+    Idempotent — safe to call more than once.
+    """
     if rule_engine.is_initialized():
         return
     for rule in python_rules.ALL_RULES:
@@ -32,4 +39,10 @@ def register_all() -> None:
         rule_engine.register(rule)
     for rule in cross_language_rules.ALL_RULES:
         rule_engine.register(rule)
+
+    # Policy-as-code: discover and register any team-authored YAML rules.
+    # Best-effort — failures never block the built-in rules from loading.
+    with contextlib.suppress(Exception):
+        register_custom_rules(rule_engine, Path.cwd())
+
     rule_engine.mark_initialized()
