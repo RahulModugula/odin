@@ -1,7 +1,7 @@
 """Persistence for PR reviews using Redis."""
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import structlog
 from redis.asyncio import Redis
@@ -18,7 +18,7 @@ class ReviewStore:
 
     async def save(self, review_id: str, data: dict) -> None:  # type: ignore[type-arg]
         key = f"pr_review:{review_id}"
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         payload = json.dumps({**data, "saved_at": now.isoformat()})
         await self.redis.set(key, payload, ex=self.ttl)
         await self.redis.zadd("pr_reviews:index", {review_id: now.timestamp()})

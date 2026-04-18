@@ -1,3 +1,7 @@
+from app.models.enums import Category, Language, Severity
+from app.models.schemas import CodeMetrics, Finding, ReviewResult
+from app.observability.logging import bind_request_id, clear_request_context
+from app.observability.metrics import review_duration_seconds, reviews_in_progress, reviews_total
 from app.services.provider_registry import (
     ProviderConfig,
     get_active_provider,
@@ -5,10 +9,6 @@ from app.services.provider_registry import (
     list_providers,
 )
 from app.services.quality_gate import QualityGateConfig, evaluate
-from app.observability.logging import bind_request_id, clear_request_context
-from app.observability.metrics import reviews_total, review_duration_seconds, reviews_in_progress
-from app.models.enums import Category, Language, Severity
-from app.models.schemas import CodeMetrics, Finding, ReviewResult
 
 
 def _make_result(score: int, severities: list[str]) -> ReviewResult:
