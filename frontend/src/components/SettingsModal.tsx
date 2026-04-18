@@ -67,6 +67,11 @@ export function SettingsModal({ isOpen, onClose, currentProvider, onProviderChan
     setTestError('');
     try {
       const res = await fetch(`/api/settings/providers/${selected}/test`, { method: 'POST' });
+      if (!res.ok) {
+        setTestStatus('error');
+        setTestError(`Provider test failed (HTTP ${res.status})`);
+        return;
+      }
       const data = await res.json();
       if (data.ok) {
         setTestStatus('ok');
