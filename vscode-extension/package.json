@@ -1,0 +1,110 @@
+{
+  "name": "odin-review",
+  "displayName": "Odin — AI Code Review",
+  "description": "Self-hosted AI code review with 0.0% false-positive rate. Runs rules instantly on save; full AI + taint review on demand.",
+  "version": "0.1.0",
+  "publisher": "odin-review",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/RahulModugula/odin.git",
+    "directory": "vscode-extension"
+  },
+  "bugs": {
+    "url": "https://github.com/RahulModugula/odin/issues"
+  },
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "code review",
+    "security",
+    "ai",
+    "static analysis",
+    "taint analysis"
+  ],
+  "activationEvents": [
+    "onLanguage:python",
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:typescriptreact",
+    "onLanguage:javascriptreact",
+    "onLanguage:go",
+    "onLanguage:rust",
+    "onLanguage:java"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "odin.reviewFile",
+        "title": "Odin: Review Current File"
+      },
+      {
+        "command": "odin.fullReview",
+        "title": "Odin: Full Review (AI + Taint Analysis)"
+      },
+      {
+        "command": "odin.clearDiagnostics",
+        "title": "Odin: Clear All Diagnostics"
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "Odin",
+      "properties": {
+        "odin.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable Odin diagnostics in this workspace."
+        },
+        "odin.reviewOnSave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run rules-only review automatically when a file is saved. No LLM calls, no backend required."
+        },
+        "odin.cliPath": {
+          "type": "string",
+          "default": "uvx",
+          "description": "Executable that provides `odin review`. Default runs `uvx odin-review review …`; set to `odin` if you installed it globally."
+        },
+        "odin.extraArgs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "description": "Extra arguments appended to every `odin review` invocation (e.g. --min-severity, --min-confidence)."
+        },
+        "odin.minSeverity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low", "info"],
+          "default": "low",
+          "description": "Minimum severity to surface as a diagnostic."
+        },
+        "odin.apiUrl": {
+          "type": "string",
+          "default": "",
+          "description": "URL of the Odin backend for full reviews. Leave blank to run fully locally via `--local`."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -w -p ./",
+    "package": "vsce package",
+    "publish": "vsce publish",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.0.0",
+    "typescript": "^5.3.0"
+  }
+}
