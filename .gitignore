@@ -40,3 +40,4 @@ Thumbs.db
 
 # Eval results
 backend/eval/results/
+.claude/worktrees/
