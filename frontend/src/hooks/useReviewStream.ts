@@ -47,6 +47,7 @@ export function useReviewStream(request: ReviewRequest): UseReviewStreamReturn {
   const [metrics, setMetrics] = useState<CodeMetrics | null>(null);
   const [totalTime, setTotalTime] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const generationRef = useRef(0);
 
   const reset = useCallback(() => {
     setFindings([]);
@@ -66,6 +67,7 @@ export function useReviewStream(request: ReviewRequest): UseReviewStreamReturn {
 
     const controller = new AbortController();
     abortRef.current = controller;
+    const gen = ++generationRef.current;
 
     setFindings([]);
     setAgentStatuses({ quality: 'pending', security: 'pending', docs: 'pending', dataflow: 'pending', rules: 'pending' });
@@ -75,6 +77,8 @@ export function useReviewStream(request: ReviewRequest): UseReviewStreamReturn {
     setMetrics(null);
     setTotalTime(null);
     setIsLoading(true);
+
+    let streamCompleted = false;
 
     try {
       const response = await fetch('/api/review/stream', {
@@ -104,6 +108,7 @@ export function useReviewStream(request: ReviewRequest): UseReviewStreamReturn {
         buffer = lines.pop() || '';
 
         for (const line of lines) {
+          if (generationRef.current !== gen) return;
           const trimmed = line.trim();
           if (!trimmed.startsWith('data: ')) continue;
 
@@ -122,8 +127,9 @@ export function useReviewStream(request: ReviewRequest): UseReviewStreamReturn {
                 break;
               }
               case 'finding': {
-                if (event.data) {
-                  setFindings(prev => [...prev, event.data!]);
+                const finding = event.data;
+                if (finding) {
+                  setFindings(prev => [...prev, finding]);
                 }
                 break;
               }
@@ -135,6 +141,7 @@ export function useReviewStream(request: ReviewRequest): UseReviewStreamReturn {
                 break;
               }
               case 'complete': {
+                streamCompleted = true;
                 if (event.overall_score !== undefined) setScore(event.overall_score);
                 if (event.summary) setSummary(event.summary);
                 if (event.total_time_ms !== undefined) setTotalTime(event.total_time_ms);
@@ -152,11 +159,18 @@ export function useReviewStream(request: ReviewRequest): UseReviewStreamReturn {
           }
         }
       }
+
+      if (!streamCompleted && generationRef.current === gen) {
+        setError('Stream ended unexpectedly. The review may be incomplete.');
+      }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return;
+      if (generationRef.current !== gen) return;
       setError(err instanceof Error ? err.message : 'An unexpected error occurred');
     } finally {
-      setIsLoading(false);
+      if (generationRef.current === gen) {
+        setIsLoading(false);
+      }
     }
   }, [request.code, request.language]);
 

@@ -21,6 +21,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [activeProvider, setActiveProvider] = useState('default');
+  const [reviewKey, setReviewKey] = useState(0);
 
   // Fetch current provider from backend on mount
   useEffect(() => {
@@ -49,6 +50,7 @@ function App() {
   const handleSubmit = useCallback(() => {
     if (!code.trim() || isLoading) return;
     setHasStarted(true);
+    setReviewKey(k => k + 1);
     startReview();
   }, [code, isLoading, startReview]);
 
@@ -126,6 +128,7 @@ function App() {
 
         <section className="lg:w-[45%] w-full flex-1 p-4 min-h-0 overflow-hidden flex flex-col">
           <ReviewResults
+            key={reviewKey}
             findings={findings}
             agentStatuses={agentStatuses}
             score={score}

@@ -4,10 +4,11 @@ import type { Finding } from '../types';
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
+    if (!navigator.clipboard) return;
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    });
+    }).catch(() => {});
   };
   return (
     <button
@@ -37,9 +38,8 @@ export function FindingCard({ finding }: FindingCardProps) {
   const isRule = finding.source === 'rule';
 
   const handleFeedback = async (action: 'helpful' | 'not_helpful') => {
-    setFeedback(action);
     try {
-      await fetch('/api/feedback', {
+      const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -50,6 +50,9 @@ export function FindingCard({ finding }: FindingCardProps) {
           language: 'unknown',
         }),
       });
+      if (res.ok) {
+        setFeedback(action);
+      }
     } catch {
       // silent fail
     }
