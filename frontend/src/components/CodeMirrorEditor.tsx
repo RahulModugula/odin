@@ -6,6 +6,8 @@ import { syntaxHighlighting, defaultHighlightStyle, bracketMatching, foldGutter,
 import { python } from '@codemirror/lang-python';
 import { javascript } from '@codemirror/lang-javascript';
 import { go } from '@codemirror/lang-go';
+import { rust } from '@codemirror/lang-rust';
+import { java } from '@codemirror/lang-java';
 import { oneDark } from '@codemirror/theme-one-dark';
 import type { LanguageSupport } from '@codemirror/language';
 
@@ -22,6 +24,8 @@ const LANG_EXTENSIONS: Record<string, () => LanguageSupport> = {
   javascript: javascript,
   typescript: () => javascript({ typescript: true }),
   go: go,
+  rust: rust,
+  java: java,
 };
 
 function getLanguageExt(lang: string): LanguageSupport | [] {

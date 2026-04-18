@@ -1,4 +1,4 @@
-import { type ChangeEvent, type DragEvent, useState, useCallback } from 'react';
+import { type ChangeEvent, type DragEvent, useState, useCallback, useEffect, useRef } from 'react';
 import { CodeMirrorEditor } from './CodeMirrorEditor';
 
 interface CodeInputProps {
@@ -181,6 +181,18 @@ const EXT_TO_LANG: Record<string, CodeInputProps['language']> = {
 export function CodeInput({ code, language, isLoading, onCodeChange, onLanguageChange, onSubmit }: CodeInputProps) {
   const [sampleOpen, setSampleOpen] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!sampleOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setSampleOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [sampleOpen]);
 
   const handleLanguageChange = (e: ChangeEvent<HTMLSelectElement>) => {
     onLanguageChange(e.target.value as CodeInputProps['language']);
@@ -241,7 +253,7 @@ export function CodeInput({ code, language, isLoading, onCodeChange, onLanguageC
 
         {/* Sample loader */}
         {currentSamples.length > 0 && (
-          <div className="relative">
+          <div className="relative" ref={dropdownRef}>
             <button
               onClick={() => setSampleOpen(o => !o)}
               className="flex items-center gap-1.5 px-3 py-2 text-xs text-gray-400 hover:text-gray-200 border border-gray-700 rounded-lg hover:border-gray-600 transition-all"
