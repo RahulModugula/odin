@@ -119,6 +119,12 @@ app.include_router(router, prefix="/api")
 app.include_router(webhook_router, prefix="/api")
 app.include_router(github_app_router, prefix="/api/github")
 
+if settings.demo_enabled:
+    from app.api.demo import demo_router
+
+    app.include_router(demo_router, prefix="/api")
+    logger.info("demo endpoint enabled at /api/demo/review")
+
 # Expose Prometheus metrics
 app.add_route("/metrics", metrics_endpoint)
 

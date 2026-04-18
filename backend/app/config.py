@@ -71,6 +71,10 @@ class Settings(BaseSettings):
     # Minimum confidence threshold — findings below this are suppressed (0.0 = show all)
     min_confidence: float = 0.0
 
+    # Noise budget: max findings surfaced per PR (0 = unlimited). Addresses the #1
+    # complaint about AI reviewers — too many comments. Sorted by severity + confidence.
+    max_findings: int = 0
+
     # Suppression thresholds (configurable via .odin.yaml)
     feedback_general_threshold: int = 3  # FP reports before suppression
     feedback_taint_threshold: int = 2  # taint-pair FP reports before suppression
@@ -78,6 +82,9 @@ class Settings(BaseSettings):
 
     # Review store TTL (seconds)
     review_store_ttl: int = 2_592_000  # 30 days
+
+    # Public demo (deploy a separate instance with this flag set)
+    demo_enabled: bool = False
 
 
 settings = Settings()
