@@ -1,0 +1,82 @@
+{
+  "run_id": "4db6c948",
+  "timestamp": "2026-04-17T19:30:47.275192",
+  "commit_sha": "fc73128",
+  "odin_version": "dev",
+  "seed": 42,
+  "datasets": [
+    "clean_corpus",
+    "secvuleval",
+    "swebench",
+    "cvebench"
+  ],
+  "tools": [
+    "semgrep"
+  ],
+  "metrics": [
+    {
+      "tool": "semgrep",
+      "dataset": "secvuleval-subset",
+      "n_samples": 14,
+      "n_vuln": 14,
+      "n_clean": 0,
+      "tp": 7,
+      "fp": 0,
+      "tn": 0,
+      "fn": 7,
+      "precision": 1.0,
+      "recall": 0.5,
+      "f1": 0.667,
+      "fp_rate": 0.0,
+      "avg_latency_ms": 5305.6
+    },
+    {
+      "tool": "semgrep",
+      "dataset": "clean_corpus",
+      "n_samples": 193,
+      "n_vuln": 0,
+      "n_clean": 193,
+      "tp": 0,
+      "fp": 4,
+      "tn": 189,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "fp_rate": 0.021,
+      "avg_latency_ms": 5203.1
+    },
+    {
+      "tool": "semgrep",
+      "dataset": "swebench-verified",
+      "n_samples": 50,
+      "n_vuln": 50,
+      "n_clean": 0,
+      "tp": 1,
+      "fp": 0,
+      "tn": 0,
+      "fn": 49,
+      "precision": 1.0,
+      "recall": 0.02,
+      "f1": 0.039,
+      "fp_rate": 0.0,
+      "avg_latency_ms": 5487.5
+    },
+    {
+      "tool": "semgrep",
+      "dataset": "cvebench-crits",
+      "n_samples": 50,
+      "n_vuln": 50,
+      "n_clean": 0,
+      "tp": 13,
+      "fp": 0,
+      "tn": 0,
+      "fn": 37,
+      "precision": 1.0,
+      "recall": 0.26,
+      "f1": 0.413,
+      "fp_rate": 0.0,
+      "avg_latency_ms": 5329.4
+    }
+  ]
+}

@@ -107,28 +107,36 @@ Client / GitHub PR ──▶ FastAPI + LangGraph
 
 **FP rate is a first-class metric. We report where Odin loses.**
 
-| Tool | Dataset | FP Rate | Recall | F1 |
-|---|---|---|---|---|
-| `odin-rules` | clean_corpus (60 samples, 6 languages) | **0.0%** | — | — |
-| `odin-rules` | secvuleval-subset (14 CVEs) | — | **86%** | **0.92** |
+### False Positive Rate — 193 clean-code samples
 
-Every competitor we tested exceeds 15% FP rate on the same clean corpus. Most don't publish FP numbers at all.
+| Tool | FP Rate | Notes |
+|---|---|---|
+| **`odin-dataflow`** | **0.0%** | 0/193 — dataflow taint tracker refuses to fire without a source→sink path |
+| `semgrep` | 2.1% | 4/193 — the open-source reference point |
+| `odin-rules` | 8.8% | 17/193 — pattern rules trade precision for coverage |
+
+### Recall on real CVEs
+
+| Tool | SecVulEval (14) | CVE-Bench crits (50) | SWE-bench Verified (50) |
+|---|---|---|---|
+| **`odin-rules`** | **86%** | **32%** (SOTA ~13%) | **100%** |
+| `semgrep` | 50% | 26% | 2% |
+| `odin-dataflow` | 21% | 6% | 2% |
+
+Every number is reproducible — dataset SHAs pinned, seed fixed at 42:
 
 ```bash
 cd backend
-
-# Run the full benchmark harness
-python -m bench.harness
-
-# Single dataset
-python -m bench.harness --dataset clean_corpus
-python -m bench.harness --dataset secvuleval
-
-# JSON output for CI
-python -m bench.harness --json
+python -m bench.harness --seed 42                           # full head-to-head
+python -m bench.harness --dataset clean_corpus --tool semgrep --seed 42
+python -m bench.harness --dataset cvebench --tool odin-rules --seed 42
+python -m bench.harness --json                              # machine-readable
 ```
 
-Full methodology + reproducible commands: [`bench/reports/leaderboard.md`](backend/bench/reports/leaderboard.md)
+Full methodology + every number: [`bench/reports/leaderboard.md`](backend/bench/reports/leaderboard.md)
+
+> CodeRabbit, Greptile, Qodo, CodeQL, and Copilot runners are wired into the same harness
+> but require API keys / hosted access — once enabled they drop into the tables above.
 
 ---
 
@@ -192,6 +200,12 @@ uvx odin-review review path/to/file.py --json | jq .
 
 # Filter by severity and confidence
 uvx odin-review review backend/ --min-severity high --min-confidence 0.8
+
+# Noise budget — keep only the top N findings (severity DESC, confidence DESC)
+uvx odin-review review backend/ --max-findings 10
+
+# AI Code Validator mode — sharpens the review for Copilot/ChatGPT-authored code
+uvx odin-review review generated_file.py --local --ai-generated
 ```
 
 Install as a git pre-push hook:
@@ -200,7 +214,13 @@ Install as a git pre-push hook:
 bash cli/install-hook.sh
 ```
 
-**Flags:** `--staged` · `--diff REF` · `--rules-only` · `--quiet` · `--min-severity` · `--min-confidence` · `--fail-on` · `--json`
+**Flags:** `--staged` · `--diff REF` · `--rules-only` · `--local` · `--quiet` · `--min-severity` · `--min-confidence` · `--fail-on` · `--fail-on-score` · `--max-findings` · `--ai-generated` · `--json` · `--sarif`
+
+## Editor + demo surfaces
+
+- **VS Code extension**: [`vscode-extension/`](vscode-extension/README.md) — on-save rules, one-click full AI review, hover squiggles.
+- **Live demo instance**: deploy the public, rate-limited demo with the config in [`infra/demo/`](infra/demo/README.md) (`ODIN_DEMO_ENABLED=true` exposes `POST /api/demo/review`).
+- **Policy-as-code**: drop YAML files in [`.odin/rules/`](.odin/rules/) to add custom pattern-based rules without writing Python — see [`app/rules/custom_loader.py`](backend/app/rules/custom_loader.py) for the schema.
 
 ---
 
