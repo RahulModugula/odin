@@ -23,6 +23,20 @@ try:
 except Exception:
     _go_language = None  # type: ignore[assignment]
 
+try:
+    import tree_sitter_rust
+
+    _rust_language = Language(tree_sitter_rust.language())
+except Exception:
+    _rust_language = None  # type: ignore[assignment]
+
+try:
+    import tree_sitter_java
+
+    _java_language = Language(tree_sitter_java.language())
+except Exception:
+    _java_language = None  # type: ignore[assignment]
+
 _LANGUAGES: dict[str, Language] = {
     "python": Language(tree_sitter_python.language()),
     "javascript": Language(tree_sitter_javascript.language()),
@@ -33,6 +47,12 @@ if _ts_language is not None:
 
 if _go_language is not None:
     _LANGUAGES["go"] = _go_language
+
+if _rust_language is not None:
+    _LANGUAGES["rust"] = _rust_language
+
+if _java_language is not None:
+    _LANGUAGES["java"] = _java_language
 
 
 def get_language(lang: LangEnum) -> Language | None:

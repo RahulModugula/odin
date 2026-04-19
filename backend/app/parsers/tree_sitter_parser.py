@@ -54,6 +54,26 @@ _COMPLEXITY_NODES: dict[str, set[str]] = {
         "select_statement",
         "binary_expression",  # for && and ||
     },
+    "rust": {
+        "if_expression",
+        "match_expression",
+        "for_expression",
+        "while_expression",
+        "loop_expression",
+        "call_expression",
+        "binary_expression",  # for && and ||
+    },
+    "java": {
+        "if_statement",
+        "for_statement",
+        "enhanced_for_statement",
+        "while_statement",
+        "do_statement",
+        "catch_clause",
+        "ternary_expression",
+        "binary_expression",
+        "switch_case",
+    },
 }
 
 # Function definition node types per language
@@ -67,6 +87,8 @@ _FUNCTION_NODES: dict[str, set[str]] = {
         "function_signature",
     },
     "go": {"function_declaration", "method_declaration"},
+    "rust": {"function_item"},
+    "java": {"method_declaration", "constructor_declaration"},
 }
 
 _CLASS_NODES: dict[str, set[str]] = {
@@ -74,6 +96,8 @@ _CLASS_NODES: dict[str, set[str]] = {
     "javascript": {"class_declaration"},
     "typescript": {"class_declaration"},
     "go": {"type_declaration"},  # Go uses type + struct, approximated here
+    "rust": {"struct_item", "enum_item"},
+    "java": {"class_declaration", "interface_declaration", "enum_declaration"},
 }
 
 _IMPORT_NODES: dict[str, set[str]] = {
@@ -81,6 +105,8 @@ _IMPORT_NODES: dict[str, set[str]] = {
     "javascript": {"import_statement"},
     "typescript": {"import_statement"},
     "go": {"import_declaration"},
+    "rust": {"use_declaration"},
+    "java": {"import_declaration"},
 }
 
 _COMMENT_NODES: dict[str, set[str]] = {
@@ -88,6 +114,8 @@ _COMMENT_NODES: dict[str, set[str]] = {
     "javascript": {"comment"},
     "typescript": {"comment"},
     "go": {"comment"},
+    "rust": {"line_comment", "block_comment"},
+    "java": {"line_comment", "block_comment"},
 }
 
 

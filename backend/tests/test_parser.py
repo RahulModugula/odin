@@ -1,3 +1,5 @@
+import textwrap
+
 from app.models.enums import Language
 from app.parsers.tree_sitter_parser import parse_code
 
@@ -60,3 +62,42 @@ def test_parse_unsupported_language() -> None:
     structure = parse_code("package main", Language.GO)
     assert structure.metrics.num_functions == 0
     assert structure.metrics.cyclomatic_complexity == 1
+
+
+def test_tree_sitter_parses_rust() -> None:
+    """Rust parser extracts functions from valid Rust code."""
+    rust_code = textwrap.dedent('''\
+        fn greet(name: &str) -> String {
+            format!("Hello, {}!", name)
+        }
+
+        fn add(a: i32, b: i32) -> i32 {
+            a + b
+        }
+    ''')
+    structure = parse_code(rust_code, Language.RUST)
+    assert structure.metrics.num_functions >= 2
+    func_names = [f.name for f in structure.functions]
+    assert "greet" in func_names
+    assert "add" in func_names
+
+
+def test_tree_sitter_parses_java() -> None:
+    """Java parser extracts methods from a class."""
+    java_code = textwrap.dedent('''\
+        public class Calculator {
+            public int add(int a, int b) {
+                return a + b;
+            }
+
+            private void log(String msg) {
+                System.out.println(msg);
+            }
+        }
+    ''')
+    structure = parse_code(java_code, Language.JAVA)
+    assert structure.metrics.num_classes >= 1
+    assert structure.metrics.num_functions >= 2
+    func_names = [f.name for f in structure.functions]
+    assert "add" in func_names
+    assert "log" in func_names

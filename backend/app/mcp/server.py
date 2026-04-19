@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from app.agents.graph import review_graph
 from app.models.enums import Language
@@ -28,6 +28,8 @@ _EXTENSION_MAP: dict[str, Language] = {
     ".ts": Language.TYPESCRIPT,
     ".tsx": Language.TYPESCRIPT,
     ".go": Language.GO,
+    ".rs": Language.RUST,
+    ".java": Language.JAVA,
 }
 
 
@@ -41,11 +43,43 @@ def _detect_language(file_path: str, hint: str = "python") -> Language:
         return Language.PYTHON
 
 
+async def _report_progress_safe(
+    ctx: Context | None,
+    progress: int,
+    total: int,
+    message: str,
+) -> None:
+    """Report progress via MCP Context, gracefully handling stdio transport errors.
+
+    Args:
+        ctx: FastMCP Context object (may be None for non-MCP callers)
+        progress: Current progress value
+        total: Total progress value
+        message: Human-readable progress message
+    """
+    if ctx is None:
+        return
+    try:
+        await ctx.report_progress(progress=progress, total=total, message=message)
+    except Exception:
+        # Gracefully no-op on stdio transport or clients that don't support progress
+        pass
+
+
 async def _run_review(
     code: str,
     language: Language,
     file_path: str | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
+    """Run a code review with optional progress reporting.
+
+    Args:
+        code: The source code to review
+        language: Programming language
+        file_path: Optional file path for context
+        ctx: Optional FastMCP Context for progress reporting
+    """
     initial_state: ReviewState = {
         "code": code,
         "language": language.value,
@@ -58,7 +92,52 @@ async def _run_review(
         "codebase_context": "",
         "file_path": file_path,
     }
-    result: dict[str, Any] = await review_graph.ainvoke(initial_state)  # type: ignore[arg-type]
+
+    # Track progress through the review pipeline
+    # Total stages: parse_code(1), enrich_context(2), agents(3-5), synthesize(6)
+    total_stages = 6
+    completed_stages = 0
+
+    # Stream graph execution to report progress after each node
+    result: dict[str, Any] = {}
+    async for event in review_graph.astream_events(initial_state, version="v1"):  # type: ignore[arg-type]
+        event_type = event.get("event")
+        if event_type == "on_chain_end":
+            node_name = event.get("name", "")
+            # Report progress after major pipeline nodes
+            if node_name == "parse_code":
+                completed_stages = 1
+                await _report_progress_safe(
+                    ctx, completed_stages, total_stages, "Odin reviewing… parsing complete"
+                )
+            elif node_name == "enrich_context":
+                completed_stages = 2
+                await _report_progress_safe(
+                    ctx, completed_stages, total_stages, "Odin reviewing… context enriched"
+                )
+            elif node_name in ("quality_agent", "security_agent", "docs_agent"):
+                # Track agent completion (3 agents in parallel)
+                agent_count = completed_stages - 2  # Count of agents completed
+                if agent_count < 3:
+                    completed_stages += 1
+                    await _report_progress_safe(
+                        ctx,
+                        completed_stages,
+                        total_stages,
+                        f"Odin reviewing… {agent_count}/3 agents complete",
+                    )
+            elif node_name == "synthesize":
+                completed_stages = 6
+                await _report_progress_safe(
+                    ctx, completed_stages, total_stages, "Odin reviewing… synthesizing findings"
+                )
+                # Get the final result
+                result = event["data"]["output"]
+
+    # Fallback: if streaming didn't produce a result, use ainvoke
+    if not result:
+        result = await review_graph.ainvoke(initial_state)  # type: ignore[arg-type]
+
     return {
         "overall_score": result["overall_score"],
         "summary": result["summary"],
@@ -72,6 +151,7 @@ async def review_code(
     code: str,
     language: str = "python",
     filename: str | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Run a full multi-agent code review on the provided source code.
 
@@ -82,17 +162,19 @@ async def review_code(
         code: The source code to review.
         language: Programming language (python, javascript, typescript, go).
         filename: Optional filename for Graph RAG context enrichment.
+        ctx: FastMCP Context for progress reporting.
     """
     lang = _detect_language(filename or "", hint=language)
-    return await _run_review(code, lang, file_path=filename)
+    return await _run_review(code, lang, file_path=filename, ctx=ctx)
 
 
 @mcp.tool()
-async def analyze_file(file_path: str) -> dict[str, Any]:
+async def analyze_file(file_path: str, ctx: Context | None = None) -> dict[str, Any]:
     """Read a file from disk and run a full code review on it.
 
     Args:
         file_path: Absolute or relative path to the source file.
+        ctx: FastMCP Context for progress reporting.
     """
     import asyncio
 
@@ -107,7 +189,7 @@ async def analyze_file(file_path: str) -> dict[str, Any]:
     code = await asyncio.to_thread(path.read_text, "utf-8", "replace")
     resolved = await asyncio.to_thread(path.resolve)
     lang = _detect_language(file_path)
-    return await _run_review(code, lang, file_path=str(resolved))
+    return await _run_review(code, lang, file_path=str(resolved), ctx=ctx)
 
 
 @mcp.tool()
@@ -115,6 +197,7 @@ async def get_findings(
     code: str,
     language: str = "python",
     severity: str | None = None,
+    ctx: Context | None = None,
 ) -> list[dict[str, Any]]:
     """Run a code review and return findings, optionally filtered by severity.
 
@@ -122,9 +205,10 @@ async def get_findings(
         code: The source code to review.
         language: Programming language.
         severity: Filter findings to this severity level (critical, high, medium, low, info).
+        ctx: FastMCP Context for progress reporting.
     """
     lang = _detect_language("", hint=language)
-    result = await _run_review(code, lang)
+    result = await _run_review(code, lang, ctx=ctx)
     findings: list[dict[str, Any]] = result["findings"]
 
     if severity:
@@ -234,6 +318,7 @@ async def query_codebase(
 async def review_diff(
     files: dict[str, str],
     changed_lines: dict[str, list[list[int]]] | None = None,
+    ctx: Context | None = None,
 ) -> dict[str, Any]:
     """Review a set of changed files and return findings, prioritising diff-local issues.
 
@@ -246,6 +331,7 @@ async def review_diff(
         changed_lines: Optional {file_path: [[start, end], ...]} describing which
             line ranges were modified. When provided, findings outside these
             ranges are marked as pre-existing.
+        ctx: FastMCP Context for progress reporting.
     """
     if not files:
         return {"findings": [], "summary": "No files provided.", "files_reviewed": 0}

@@ -87,6 +87,13 @@ def test_does_not_skip_valid_typescript_added() -> None:
     assert should_skip_file("src/hooks/useAuth.ts", "added") is False
 
 
+def test_rust_and_java_not_skipped() -> None:
+    assert not should_skip_file("example.rs", "added")
+    assert not should_skip_file("Example.java", "added")
+    assert detect_language("example.rs") == Language.RUST
+    assert detect_language("Example.java") == Language.JAVA
+
+
 # ── Comment building ─────────────────────────────────────────────────────────
 
 

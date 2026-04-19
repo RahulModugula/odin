@@ -34,6 +34,8 @@ EXTENSION_TO_LANGUAGE: dict[str, Language] = {
     ".ts": Language.TYPESCRIPT,
     ".tsx": Language.TYPESCRIPT,
     ".go": Language.GO,
+    ".rs": Language.RUST,
+    ".java": Language.JAVA,
 }
 
 LOCK_FILE_NAMES = {
