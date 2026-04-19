@@ -138,36 +138,155 @@ async def query_codebase(
     query: str,
     file_path: str | None = None,
 ) -> dict[str, Any]:
-    """Query the Graph RAG knowledge graph for context about code patterns.
+    """Query the code knowledge graph (or the file AST as fallback) for context.
 
-    Searches the indexed codebase for callers, dependencies, and related functions.
+    Searches for callers, dependencies, and related functions. Falls back to a
+    single-file AST scan when the Graph RAG store is not indexed.
 
     Args:
         query: Name of a function or class to look up (e.g. "process_user_data").
-        file_path: Optional file path to scope the search.
+        file_path: Optional file path. Required for AST fallback.
     """
+    import asyncio
+
     import app.graph_rag._store_ref as _store_ref
 
-    if _store_ref.store is None or not _store_ref.store.is_connected:
+    store = _store_ref.store
+    if store is not None and store.is_connected:
+        ctx = await store.query_context(
+            function_names=[query],
+            file_path=file_path or "",
+        )
         return {
-            "error": (
-                "Knowledge graph not available. "
-                "Index files via POST /api/index or enable ODIN_GRAPH_RAG_ENABLED."
-            )
+            "queried": query,
+            "source": "graph_rag",
+            "callers": [c.model_dump() for c in ctx.callers],
+            "callees": [c.model_dump() for c in ctx.callees],
+            "siblings": ctx.siblings,
+            "imports": ctx.imports,
+            "parent_class": ctx.parent_class,
         }
 
-    ctx = await _store_ref.store.query_context(
-        function_names=[query],
-        file_path=file_path or "",
+    if not file_path:
+        return {
+            "queried": query,
+            "source": "none",
+            "note": (
+                "Graph RAG not indexed and no file_path provided. "
+                "Pass file_path for a single-file AST fallback, or enable "
+                "ODIN_GRAPH_RAG_ENABLED and index your codebase."
+            ),
+        }
+
+    path = Path(file_path)
+    exists = await asyncio.to_thread(path.exists)
+    if not exists:
+        return {"queried": query, "source": "none", "error": f"File not found: {file_path}"}
+
+    code = await asyncio.to_thread(path.read_text, "utf-8", "replace")
+    lang = _detect_language(file_path)
+
+    try:
+        from app.parsers.tree_sitter_parser import parse_code
+
+        structure = parse_code(code, lang)
+    except Exception as exc:
+        return {"queried": query, "source": "none", "error": f"Parse failed: {exc}"}
+
+    fn = next(
+        (f for f in structure.functions if f.name == query),
+        None,
+    )
+    cls = next(
+        (c for c in structure.classes if c.name == query),
+        None,
     )
 
     return {
         "queried": query,
-        "callers": [c.model_dump() for c in ctx.callers],
-        "callees": [c.model_dump() for c in ctx.callees],
-        "siblings": ctx.siblings,
-        "imports": ctx.imports,
-        "parent_class": ctx.parent_class,
+        "source": "ast",
+        "function": (
+            {
+                "name": fn.name,
+                "line_start": fn.line_start,
+                "line_end": fn.line_end,
+                "has_docstring": fn.has_docstring,
+            }
+            if fn
+            else None
+        ),
+        "class": (
+            {
+                "name": cls.name,
+                "line_start": cls.line_start,
+                "line_end": cls.line_end,
+                "method_count": cls.method_count,
+            }
+            if cls
+            else None
+        ),
+        "siblings": [f.name for f in structure.functions if f.name != query][:10],
+        "imports": structure.imports[:20],
+    }
+
+
+@mcp.tool()
+async def review_diff(
+    files: dict[str, str],
+    changed_lines: dict[str, list[list[int]]] | None = None,
+) -> dict[str, Any]:
+    """Review a set of changed files and return findings, prioritising diff-local issues.
+
+    This is the preferred tool for reviewing a PR or a set of edits made by an AI
+    agent — findings on unchanged lines are downgraded so reviewers focus on what
+    actually changed.
+
+    Args:
+        files: Mapping of {file_path: full_file_contents_after_change}.
+        changed_lines: Optional {file_path: [[start, end], ...]} describing which
+            line ranges were modified. When provided, findings outside these
+            ranges are marked as pre-existing.
+    """
+    if not files:
+        return {"findings": [], "summary": "No files provided.", "files_reviewed": 0}
+
+    all_findings: list[dict[str, Any]] = []
+    per_file: dict[str, dict[str, Any]] = {}
+
+    for file_path, code in files.items():
+        lang = _detect_language(file_path)
+        ranges = changed_lines.get(file_path) if changed_lines else None
+        ranges_tuples = [(int(r[0]), int(r[1])) for r in ranges] if ranges else []
+
+        initial_state: ReviewState = {
+            "code": code,
+            "language": lang.value,
+            "ast_summary": "",
+            "metrics": None,  # type: ignore[typeddict-item]
+            "findings": [],
+            "agent_outputs": [],
+            "overall_score": 100,
+            "summary": "",
+            "codebase_context": "",
+            "file_path": file_path,
+        }
+        if ranges_tuples:
+            initial_state["changed_lines"] = ranges_tuples
+
+        result: dict[str, Any] = await review_graph.ainvoke(initial_state)  # type: ignore[arg-type]
+        findings_for_file = [f.model_dump() for f in result["findings"]]
+        per_file[file_path] = {
+            "score": result["overall_score"],
+            "findings": findings_for_file,
+        }
+        for f in findings_for_file:
+            f["file"] = file_path
+            all_findings.append(f)
+
+    return {
+        "files_reviewed": len(files),
+        "findings": all_findings,
+        "per_file": per_file,
     }
 
 

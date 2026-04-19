@@ -8,7 +8,7 @@
 
 Odin implements the [LLift (OOPSLA 2024)](https://www.cs.ucr.edu/~zhiyunq/pub/oopsla24_llift.pdf) / [INFERROI (ICSE 2025)](https://conf.researchr.org/details/icse-2025) architecture: cheap taint propagation narrows the search space, then an LLM reasons about exploitability only on real candidates. A feedback loop suppresses known false-positive (source, sink) pairs *before* the LLM runs — so cost and noise drop together over time.
 
-**0.0% false-positive rate** on 193 clean-code samples (dataflow taint tracker) / **8.8%** (deterministic rules). Every number is reproducible — run `python -m bench.harness` yourself.
+**FP rates on 193 clean-code samples**: dataflow taint tracker **0.0%** (narrow: ~8 sink categories), deterministic rules **8.8%** (full ruleset). Semgrep: 2.1% on the same corpus, wider ruleset. The `odin-rules` number is the fair head-to-head; the dataflow number is scoped to sinks where a full source→sink path is required. Every number is reproducible — see [`leaderboard.md`](backend/bench/reports/leaderboard.md) for methodology and caveats.
 
 ---
 

@@ -450,6 +450,46 @@ def _build_ast_summary(structure) -> str:  # type: ignore[no-untyped-def]
     return "\n".join(lines)
 
 
+async def _persist_dataflow_edges(
+    confirmed: list[TaintCandidate],
+    file_path: str | None,
+) -> None:
+    """Write confirmed (source, sink) taint paths into the graph as DATAFLOWS_TO edges.
+
+    Future reviews of the same file can look up these paths via the graph instead
+    of re-running the LLM triage on an identical candidate — this is the learning
+    loop that compounds across reviews.
+    """
+    if not settings.graph_rag_enabled or not file_path:
+        return
+    try:
+        import app.graph_rag._store_ref as _ref
+
+        store = getattr(_ref, "store", None)
+        if store is None or not store.is_connected:
+            return
+
+        for candidate in confirmed:
+            source_name = (
+                candidate.source.call_pattern
+                or candidate.source.attr_pattern
+                or candidate.source.kind.value
+            )
+            sink_name = candidate.sink.call_pattern or candidate.sink.kind.value
+            hop_vars = [h.variable for h in candidate.hops if h.variable]
+            await store.store_dataflow_edge(
+                source_name=source_name,
+                sink_name=sink_name,
+                source_file=file_path,
+                sink_file=file_path,
+                source_kind=candidate.source.kind.value,
+                sink_kind=candidate.sink.kind.value,
+                hops=hop_vars,
+            )
+    except Exception as exc:
+        logger.debug("dataflow edge persistence failed", error=str(exc))
+
+
 async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type-arg]
     """Dataflow-guided LLM triage — open-source reference impl of LLift/INFERROI.
 
@@ -519,9 +559,11 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
         confidence_floor = 0.45 if state.get("ai_generated") else TRIAGE_CONFIDENCE_FLOOR
 
         findings: list[Finding] = []
+        confirmed: list[TaintCandidate] = []
         for candidate, verdict in zip(candidates, verdicts, strict=False):
             if not verdict.exploitable or verdict.confidence < confidence_floor:
                 continue
+            confirmed.append(candidate)
             findings.append(
                 Finding(
                     severity=_taint_severity(
@@ -542,6 +584,11 @@ async def dataflow_triage_node(state: ReviewState) -> dict:  # type: ignore[type
                     source="dataflow",
                 )
             )
+
+        # Persist DATAFLOWS_TO edges so future reviews of the same file can
+        # look up confirmed taint paths without rerunning the LLM.
+        if confirmed:
+            await _persist_dataflow_edges(confirmed, state.get("file_path"))
 
         output = AgentOutput(agent_name="dataflow_triage", findings=findings)
         return {"findings": findings, "agent_outputs": [output]}

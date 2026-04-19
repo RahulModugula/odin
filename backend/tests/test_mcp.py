@@ -85,10 +85,62 @@ async def test_get_findings_filters_by_severity():
 
 
 @pytest.mark.asyncio
-async def test_query_codebase_no_store_returns_error():
+async def test_query_codebase_no_store_no_file_returns_note():
     with patch("app.graph_rag._store_ref.store", None):
         from app.mcp.server import query_codebase
 
         result = await query_codebase("process_data")
 
-    assert "error" in result
+    assert result["source"] == "none"
+    assert "note" in result
+
+
+@pytest.mark.asyncio
+async def test_query_codebase_no_store_ast_fallback(tmp_path):
+    f = tmp_path / "sample.py"
+    f.write_text("def target():\n    pass\n\ndef other():\n    pass\n")
+
+    with patch("app.graph_rag._store_ref.store", None):
+        from app.mcp.server import query_codebase
+
+        result = await query_codebase("target", file_path=str(f))
+
+    assert result["source"] == "ast"
+    assert result["function"]["name"] == "target"
+    assert "other" in result["siblings"]
+
+
+@pytest.mark.asyncio
+async def test_review_diff_reviews_multiple_files():
+    async def fake_ainvoke(state):
+        from app.models.schemas import CodeMetrics
+
+        return {
+            "overall_score": 95,
+            "findings": [],
+            "summary": "OK.",
+            "metrics": CodeMetrics(
+                lines_of_code=1,
+                num_functions=0,
+                num_classes=0,
+                avg_function_length=0,
+                max_function_length=0,
+                max_nesting_depth=0,
+                cyclomatic_complexity=0,
+                comment_ratio=0.0,
+                import_count=0,
+            ),
+            "agent_outputs": [],
+        }
+
+    with patch("app.mcp.server.review_graph.ainvoke", new=AsyncMock(side_effect=fake_ainvoke)):
+        from app.mcp.server import review_diff
+
+        result = await review_diff(
+            files={"a.py": "print(1)", "b.py": "print(2)"},
+            changed_lines={"a.py": [[1, 1]]},
+        )
+
+    assert result["files_reviewed"] == 2
+    assert "a.py" in result["per_file"]
+    assert "b.py" in result["per_file"]
