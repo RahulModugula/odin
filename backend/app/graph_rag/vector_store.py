@@ -224,6 +224,8 @@ _vector_store: VectorStore | None = None
 
 
 def get_vector_store() -> VectorStore | None:
+    if _vector_store is not None:
+        logger.warning("vector_store_enabled is experimental — not recommended for production use")
     return _vector_store
 
 

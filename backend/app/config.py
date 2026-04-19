@@ -23,7 +23,8 @@ class Settings(BaseSettings):
     memgraph_uri: str = "bolt://localhost:7687"
     memgraph_auth: str | None = None
 
-    # Vector store
+    # Vector store (experimental — not documented, disabled by default)
+    # See: https://github.com/user/odin/issues/TBD (tracking issue to ship properly)
     vector_store_enabled: bool = False
     vector_store_persist_dir: str | None = None
 
