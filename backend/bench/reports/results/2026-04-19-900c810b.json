@@ -1,0 +1,82 @@
+{
+  "run_id": "900c810b",
+  "timestamp": "2026-04-19T05:16:54.192401",
+  "commit_sha": "f9472d2",
+  "odin_version": "dev",
+  "seed": 42,
+  "datasets": [
+    "clean_corpus",
+    "secvuleval",
+    "swebench",
+    "cvebench"
+  ],
+  "tools": [
+    "odin-dataflow"
+  ],
+  "metrics": [
+    {
+      "tool": "odin-dataflow",
+      "dataset": "secvuleval-subset",
+      "n_samples": 14,
+      "n_vuln": 14,
+      "n_clean": 0,
+      "tp": 3,
+      "fp": 0,
+      "tn": 0,
+      "fn": 11,
+      "precision": 1.0,
+      "recall": 0.214,
+      "f1": 0.353,
+      "fp_rate": 0.0,
+      "avg_latency_ms": 0.1
+    },
+    {
+      "tool": "odin-dataflow",
+      "dataset": "clean_corpus",
+      "n_samples": 193,
+      "n_vuln": 0,
+      "n_clean": 193,
+      "tp": 0,
+      "fp": 0,
+      "tn": 193,
+      "fn": 0,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "fp_rate": 0.0,
+      "avg_latency_ms": 0.1
+    },
+    {
+      "tool": "odin-dataflow",
+      "dataset": "cvebench-crits",
+      "n_samples": 50,
+      "n_vuln": 50,
+      "n_clean": 0,
+      "tp": 3,
+      "fp": 0,
+      "tn": 0,
+      "fn": 47,
+      "precision": 1.0,
+      "recall": 0.06,
+      "f1": 0.113,
+      "fp_rate": 0.0,
+      "avg_latency_ms": 0.0
+    },
+    {
+      "tool": "odin-dataflow",
+      "dataset": "swebench-verified",
+      "n_samples": 50,
+      "n_vuln": 50,
+      "n_clean": 0,
+      "tp": 1,
+      "fp": 0,
+      "tn": 0,
+      "fn": 49,
+      "precision": 1.0,
+      "recall": 0.02,
+      "f1": 0.039,
+      "fp_rate": 0.0,
+      "avg_latency_ms": 0.0
+    }
+  ]
+}
