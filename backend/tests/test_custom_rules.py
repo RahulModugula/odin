@@ -232,3 +232,47 @@ def test_register_loads_and_counts(tmp_path: Path) -> None:
     findings = engine.check_all("x = eval('1+1')\n", Language.PYTHON)
     assert len(findings) == 1
     assert findings[0].title == "TEAM010" or "eval" in findings[0].description
+
+
+# ── End-to-end: committed example rule ────────────────────────────────────────
+
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent  # odin workspace root
+
+
+def test_committed_example_rule_detects_pickle_loads() -> None:
+    """End-to-end: load the committed example rule and verify it catches pickle.loads."""
+    specs = load_custom_rules(_REPO_ROOT)
+    # Find the pickle rule by id or name
+    pickle_rules = [s for s in specs if "pickle" in s.id.lower() or "pickle" in s.name.lower()]
+    assert len(pickle_rules) >= 1, (
+        f"Expected at least one pickle rule, found: {[s.id for s in specs]}"
+    )
+
+    engine = RuleEngine()
+    for spec in pickle_rules:
+        engine.register(_CustomPatternRule(spec))
+
+    code = "import pickle\ndata = pickle.loads(user_input)\n"
+    findings = engine.check_all(code, Language.PYTHON)
+    assert len(findings) >= 1
+    # Verify finding attributes
+    f = findings[0]
+    assert f.severity is not None
+    assert f.line_start is not None
+
+
+def test_committed_example_rule_no_false_positive() -> None:
+    """Negative control: the committed rule should not fire on safe code."""
+    specs = load_custom_rules(_REPO_ROOT)
+    pickle_rules = [s for s in specs if "pickle" in s.id.lower() or "pickle" in s.name.lower()]
+    if not pickle_rules:
+        pytest.skip("No pickle rule found")
+
+    engine = RuleEngine()
+    for spec in pickle_rules:
+        engine.register(_CustomPatternRule(spec))
+
+    safe_code = "import json\ndata = json.loads(user_input)\n"
+    findings = engine.check_all(safe_code, Language.PYTHON)
+    assert len(findings) == 0
