@@ -2,37 +2,78 @@
 
 Matching criterion
 ------------------
-The scorer uses **sample-level matching**: a vulnerable sample is counted as a
-true positive if the tool produces *any* finding (above the confidence
-threshold) on that sample, regardless of the finding's line range, category,
-or rule ID.
+The scorer uses **line-localized matching**: a vulnerable sample is counted as
+a true positive only if the tool produces a finding whose reported line range
+overlaps a ground-truth bug marker (``# BUG:`` / ``// VULNERABLE:``) in the
+sample.  A finding that fires elsewhere in the snippet — a tangential "magic
+number", "missing docstring", or "line too long" — does **not** count.
 
-This is appropriate for the SWE-bench and SecVulEval datasets because each
-sample is a small, self-contained code snippet (typically 5–15 lines) where
-the entire snippet *is* the buggy code.  There is no "unrelated code" for a
-tool to accidentally flag.
+This replaces the earlier *sample-level* criterion, under which any finding
+anywhere in a snippet was credited.  That criterion inflated recall into a
+measure of rule *breadth* ("did the tool print anything?") rather than
+vulnerability *detection* ("did the tool flag the actual bug?"), and produced
+numbers — 100% on SWE-bench, 86% on SecVulEval — that do not survive scrutiny.
+The line-localized criterion is the honest one and is what every headline
+number in ``leaderboard.md`` is now computed under.
 
-Caveat: a tool that flags a tangential quality or style issue (e.g. "missing
-docstring") on a snippet whose ground-truth bug is a logic error will still
-receive credit.  The recall number therefore measures "did the tool fire on
-*anything* in the snippet?" rather than "did the tool correctly identify the
-*specific* bug?".  This is documented in the leaderboard methodology section.
-
-The ``matches`` function below encapsulates the criterion so it can be
-tightened (e.g. to require line-range overlap) in the future without
-modifying the surrounding orchestration code.
+Clean samples carry no markers, so the false-positive definition is unchanged:
+any finding on a clean sample is still a false positive.  See ``matches`` for
+the two fail-open fallbacks.
 """
 
 from __future__ import annotations
 
+import re
+from dataclasses import replace
+
 from bench.schemas import (
     SampleLabel,
     SampleResult,
+    ToolFinding,
 )
-from bench.tools.common import BenchSample, ToolFinding, ToolRunner
+from bench.tools.common import BenchSample, ToolRunner
 
 # A sample is "flagged" if the tool produced at least one finding above this severity threshold.
 _FINDING_THRESHOLD_CONFIDENCE = 0.0  # include all findings by default
+
+# Ground-truth markers embedded in the vulnerable samples.  A marker on line M
+# flags either the trailing code on line M or the statement on the line
+# immediately below it (comment-above style), so the accepted window is [M, M+1].
+_MARKER_RE = re.compile(r"(?:#|//)\s*(?:BUG|VULNERABLE)\b", re.IGNORECASE)
+_MARKER_SPAN = 1  # lines below the marker that still count as the same bug
+
+
+def _ground_truth_windows(code: str) -> list[tuple[int, int]]:
+    """Return 1-indexed inclusive (start, end) line windows around each
+    ground-truth bug marker in *code*."""
+    windows: list[tuple[int, int]] = []
+    for lineno, line in enumerate(code.splitlines(), start=1):
+        if _MARKER_RE.search(line):
+            windows.append((lineno, lineno + _MARKER_SPAN))
+    return windows
+
+
+def strip_markers(code: str) -> str:
+    """Remove ground-truth ``# BUG:`` / ``// VULNERABLE:`` annotations from
+    *code* while preserving line numbers.
+
+    This is **contamination control**.  The markers are scoring metadata, not
+    part of the program under review.  If the raw marker text reaches the tool,
+    a rule that flags ``TODO``/``FIXME``/``BUG`` comments (Odin's CL001, among
+    others) will "detect" the planted comment on the exact bug line — turning
+    recall into a measure of *"did the tool grep for the word BUG we inserted?"*
+    Empirically this alone produced Odin's fake 100% on SWE-bench.
+
+    Everything before the marker on its line is kept (so a trailing annotation
+    like ``x = f(y)  # BUG: ...`` leaves ``x = f(y)`` intact); a whole-line
+    marker collapses to a blank line so downstream line numbers are unchanged
+    and still align with ``_ground_truth_windows`` computed on the original.
+    """
+    out: list[str] = []
+    for line in code.splitlines():
+        m = _MARKER_RE.search(line)
+        out.append(line[: m.start()].rstrip() if m else line)
+    return "\n".join(out)
 
 
 def matches(
@@ -41,23 +82,28 @@ def matches(
 ) -> bool:
     """Determine whether a single finding counts as a hit on *sample*.
 
-    Current criterion — **sample-level**: any finding on a vulnerable sample
-    is considered a match.  Line-range overlap is *not* required because the
-    benchmark samples are self-contained snippets where the entire code is the
-    bug context.
+    Criterion — **line-localized**: the finding's reported line range must
+    overlap a window around a ground-truth ``# BUG:`` / ``// VULNERABLE:``
+    marker.  A finding on an unrelated line does not count.
 
-    To tighten the criterion (e.g. require that the finding's line range
-    overlaps the ground-truth buggy lines), modify this function.  The rest
-    of the scoring pipeline calls ``matches`` and will pick up the change
-    automatically.
+    Two fail-open fallbacks (both also apply to clean samples, keeping the
+    false-positive rate identical to the previous scorer):
+
+    * **No markers in the sample** → any finding matches.  Clean samples never
+      carry markers, so this preserves the FP definition; a markerless
+      vulnerable sample is not silently zeroed out.
+    * **Finding has no line range** → cannot be localized, so it does *not*
+      match when markers are present (the tool failed to point at the bug).
     """
-    # Sample-level: any finding is a match.  The sample's ``notes`` field
-    # contains the ground-truth description (including ``# BUG:`` markers in
-    # the code), but we do not require the finding to overlap those lines
-    # because the snippets are too small for line-level precision to be
-    # meaningful.
-    _ = sample, finding  # acknowledge parameters — criterion is unconditional
-    return True
+    windows = _ground_truth_windows(sample.code)
+    if not windows:
+        return True
+
+    if finding.line_start is None:
+        return False
+    f_start = finding.line_start
+    f_end = finding.line_end if finding.line_end is not None else finding.line_start
+    return any(f_start <= w_end and f_end >= w_start for w_start, w_end in windows)
 
 
 def classify(
@@ -111,8 +157,11 @@ def run_tool_on_dataset(
     """Run a tool against all samples in a dataset and classify results."""
     results = []
     for sample in samples:
+        # Strip ground-truth markers before the tool sees the code, but classify
+        # against the original sample so _ground_truth_windows still has them.
+        clean_sample = replace(sample, code=strip_markers(sample.code))
         try:
-            findings, latency_ms = runner.run(sample)
+            findings, latency_ms = runner.run(clean_sample)
         except Exception as exc:
             results.append(
                 SampleResult(
