@@ -4,11 +4,17 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://python.org)
 
-**Open-source AI code review with intra-procedural taint analysis, a public FP-rate leaderboard, and a learning feedback loop.**
+**The taint-guided security reviewer for AI-generated code. MIT-licensed, self-hostable, and the only one that publishes an honest, reproducible false-positive rate.**
+
+Dataflow taint analysis narrows the candidates; an LLM proves exploitability on the few that survive. Odin runs on your own infrastructure with your own model — OpenRouter, OpenAI, Anthropic, or a local LLM via LM Studio / Ollama — and every benchmark number ships with the command to reproduce it.
+
+![Odin vs Semgrep — false-positive rate and security recall](backend/bench/reports/hero-chart.png)
+
+> **Why this exists:** 2026 studies put ~45% of AI-generated code at introducing a known security flaw — roughly **2.7× the vulnerability density** of human-written code — while security-review coverage runs 20–30% *lower* for AI-authored changes. Odin is the review layer built for that gap: it assumes the code was written fast and checks it like it wasn't.
 
 Odin implements the [LLift (OOPSLA 2024)](https://www.cs.ucr.edu/~zhiyunq/pub/oopsla24_llift.pdf) / [INFERROI (ICSE 2025)](https://conf.researchr.org/details/icse-2025) architecture: cheap taint propagation narrows the search space, then an LLM reasons about exploitability only on real candidates. A feedback loop suppresses known false-positive (source, sink) pairs *before* the LLM runs — so cost and noise drop together over time.
 
-**FP rates on 193 clean-code samples**: dataflow taint tracker **0.0%** (narrow: ~8 sink categories), deterministic rules **8.8%** (full ruleset). Semgrep: 2.1% on the same corpus, wider ruleset. The `odin-rules` number is the fair head-to-head; the dataflow number is scoped to sinks where a full source→sink path is required. Every number is reproducible — see [`leaderboard.md`](backend/bench/reports/leaderboard.md) for methodology and caveats.
+**FP rate on 193 clean-code samples** — the metric nobody else publishes: dataflow taint tracker **0.0%**, deterministic rules **8.8%**, vs Semgrep's **2.1%**. On real security bugs (SecVulEval), `odin-rules` catches **64%** to Semgrep's 29%, both at 100% precision. Every recall number is computed under **line-localized matching** — a finding must land on the vulnerable line to count — with ground-truth markers stripped so no rule can score by grepping for them. Full methodology, and where Odin loses: [`leaderboard.md`](backend/bench/reports/leaderboard.md).
 
 ---
 
@@ -58,9 +64,9 @@ Odin posts structured reviews with inline comments, severity badges, and fix sug
 | Feature | Details |
 |---|---|
 | **Dataflow triage** | Intra-procedural taint analysis → LLM reasons about exploitability on narrowed candidates only (LLift/INFERROI architecture) |
-| **27 deterministic rules** | Python, JS, TS, Go, Rust, Java — zero cost, instant |
+| **29 deterministic rules** | Python, JS, TS, Go, Rust, Java — zero cost, instant |
 | **Learning feedback loop** | Mark a finding false-positive twice → that (source, sink) pair is suppressed before the LLM runs next time |
-| **Honest leaderboard** | Public FP-rate benchmark on 60 clean samples + CVE recall; every number reproducible |
+| **Honest leaderboard** | Public FP-rate benchmark on 193 clean samples + CVE recall; every number reproducible, line-localized, contamination-controlled |
 | **uvx one-binary install** | `uvx odin-review review <file>` — works from a clean machine, BYOK |
 | **GitHub App** | One-click install, auto-registers webhook, reviews every PR |
 | **GitHub webhook** | Manual webhook setup if you prefer |
@@ -115,13 +121,23 @@ Client / GitHub PR ──▶ FastAPI + LangGraph
 | `semgrep` | 2.1% | 4/193 — the open-source reference point |
 | `odin-rules` | 8.8% | 17/193 — pattern rules trade precision for coverage |
 
-### Recall on real CVEs
+### Recall on real security bugs — SecVulEval (14 CVEs)
 
-| Tool | SecVulEval (14) | CVE-Bench crits (50) | SWE-bench Verified (50) |
+| Tool | Recall | Precision | F1 |
 |---|---|---|---|
-| **`odin-rules`** | **86%** | **32%** (SOTA ~13%) | **100%** |
-| `semgrep` | 50% | 26% | 2% |
-| `odin-dataflow` | 21% | 6% | 2% |
+| **`odin-rules`** | **64%** | 100% | 0.78 |
+| `semgrep` | 29% | 100% | 0.44 |
+| `odin-dataflow` | 7% | 100% | 0.13 |
+
+### The hard datasets — reported anyway
+
+| Tool | CVE-Bench crits (50 · SOTA ~13%) | SWE-bench Verified (50 · logic bugs) |
+|---|---|---|
+| `odin-rules` | 8% | 4% |
+| `semgrep` | 8% | 0% |
+| `odin-dataflow` | 0% | 2% |
+
+> **On honesty:** an earlier version of this leaderboard reported *86% SecVulEval, 32% CVE-Bench, and 100% SWE-bench* for `odin-rules`. Those came from a scorer that counted **any** finding anywhere in a sample as a hit — and worse, the benchmark planted a `# BUG:` comment on each buggy line, which a comment-linting rule "detected." We rewrote the scorer to require the finding to land on the vulnerable line, and to strip the planted markers before the tool sees the code. The numbers above are what survived. CVE-Bench is genuinely brutal (Odin ties Semgrep below SOTA); SWE-bench measures logic bugs, which deterministic SAST isn't built to catch. The full story is in [`leaderboard.md`](backend/bench/reports/leaderboard.md).
 
 Every number is reproducible — dataset SHAs pinned, seed fixed at 42:
 
@@ -137,6 +153,18 @@ Full methodology + every number: [`bench/reports/leaderboard.md`](backend/bench/
 
 > CodeRabbit, Greptile, Qodo, CodeQL, and Copilot runners are wired into the same harness
 > but require API keys / hosted access — once enabled they drop into the tables above.
+
+---
+
+## Odin on Odin
+
+We run Odin against its own backend. The rules-only pass currently reports **102 findings (6 critical, 48 high)** — and the honest read is the point: **all 6 "critical" findings are false positives.** They fire on Odin's own machinery — the rule that *detects* `eval()` necessarily contains the string `eval`; the dataflow sink registry *lists* `pickle` and `yaml.load` as dangerous sinks. None has a user-controlled source→sink path, which is exactly why the **dataflow tracker flags zero of them.**
+
+That's the whole thesis in one screenshot: pattern rules are noisy (that's the 8.8% FP rate), and taint analysis is what buys back precision. We'd rather show you the false positives on our own code than hide them.
+
+```bash
+uvx odin-review review backend/app --rules-only    # reproduce it
+```
 
 ---
 
@@ -306,21 +334,25 @@ quality_gate:
 
 ## MCP Server
 
-Use Odin as a tool inside Claude Code or Cursor:
+Use Odin as a tool inside Claude Code, Cursor, or any MCP client — it reviews the diff before you commit it.
+
+**Claude Code (one line):**
+
+```bash
+claude mcp add --scope user odin -- uvx --from odin-review odin-mcp
+```
+
+**Cursor / Windsurf** — add to `~/.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "odin": {
-      "command": "python",
-      "args": ["-m", "app.mcp.stdio_runner"],
-      "cwd": "/path/to/odin/backend"
-    }
+    "odin": { "command": "uvx", "args": ["--from", "odin-review", "odin-mcp"] }
   }
 }
 ```
 
-Available tools: `review_code`, `analyze_file`, `get_findings`, `query_codebase`
+Available tools: `review_diff` (the primary PR-review path), `review_code`, `analyze_file`, `get_findings`, `query_codebase`.
 
 ---
 
@@ -355,7 +387,7 @@ The honest comparison — including where CodeRabbit wins.
 | **Data privacy** | ✅ never leaves your infra | ❌ | ❌ |
 | **Local LLMs (LM Studio, Ollama)** | ✅ | ❌ | ❌ |
 | **BYOK (OpenRouter, OpenAI)** | ✅ | ❌ | ✅ |
-| **Published FP rate** | ✅ [0.0% on 60 clean samples](backend/bench/reports/leaderboard.md) | ❌ | ❌ |
+| **Published FP rate** | ✅ [0.0% dataflow / 8.8% rules on 193 clean samples](backend/bench/reports/leaderboard.md) | ❌ | ❌ |
 | **Reproducible benchmarks** | ✅ `python -m bench.harness` | ❌ | ❌ |
 | **Taint-guided triage (LLift/INFERROI)** | ✅ | ❌ | ❌ |
 | **Learning feedback loop** | ✅ suppresses FPs at generator level | ❌ | limited |
@@ -370,7 +402,14 @@ The honest comparison — including where CodeRabbit wins.
 
 **Where CodeRabbit wins:** more platform integrations (GitLab, Bitbucket, Azure DevOps), more rules out of the box, more mature bot UX, and a larger team maintaining it. If you're on GitLab or want something fully managed, CodeRabbit is a better fit today.
 
-**Where Odin wins:** if your code can't leave your infrastructure, if you want to understand and audit what's running, if you want FP rates that actually drop over time, or if you want to run it free with your own model — Odin is the only open-source option in this space with published, reproducible benchmarks and a research-backed triage architecture.
+**Where Odin wins:** if your code can't leave your infrastructure, if you want to understand and audit what's running, if you want FP rates that actually drop over time, or if you want to run it free with your own model.
+
+### vs the other open-source options
+
+Odin isn't the only self-hostable reviewer anymore — [Kodus](https://kodus.io) and [PR-Agent / Qodo Merge](https://github.com/qodo-ai/pr-agent) are both credible OSS choices, and they're good. Two things set Odin apart:
+
+- **License.** Odin is **MIT**; Kodus is **AGPLv3**. If you want to embed, fork, or ship a reviewer inside a commercial product without copyleft obligations, MIT is the one you can actually build on.
+- **Architecture.** Odin leads with **taint-guided triage** (dataflow narrows candidates → LLM proves exploitability, the LLift/INFERROI lineage) and a **published, reproducible FP rate**. Most reviewers — open or closed — are prompt-over-diff; none publish a false-positive number you can regenerate. If you're on GitLab, want the most mature bot UX today, or want a hosted option, the tools above may fit you better.
 
 ---
 
