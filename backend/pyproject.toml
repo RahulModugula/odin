@@ -32,6 +32,7 @@ dependencies = [
 ]
 
 [project.scripts]
+odin-review = "app.cli.review:main"
 odin-mcp = "app.mcp.stdio_runner:main"
 odin = "app.cli.review:main"
 
