@@ -101,6 +101,8 @@ Client / GitHub PR ──▶ FastAPI + LangGraph
                GitHub PR review / Web UI / CLI / SSE stream
 ```
 
+Full engineering deep-dive — pipeline, research lineage, the CRAG retriage loop, and the learning loop: [`docs/architecture.md`](docs/architecture.md).
+
 **DataflowTriage pipeline:**
 1. Walk each function body with an intra-procedural taint tracker (assignment-chain + call-arg propagation)
 2. Check the (source_sig, sink_sig) suppression table — skip known-FP pairs before the LLM runs
