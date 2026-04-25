@@ -49,7 +49,7 @@ Odin is a [LangGraph](https://langchain-ai.github.io/langgraph/) `StateGraph`
      ┌───────────┴─────── fan-out (conditional, parallel) ───────────┐
      ▼           ▼            ▼             ▼                ▼
  security     quality       docs         run_rules     dataflow_triage
-  agent        agent        agent      (29 rules,      taint tracker
+  agent        agent        agent      (51 rules,      taint tracker
  (LLM)        (LLM)        (LLM)        instant)       → LLM triage
      └───────────┴────────────┴─────────────┴────────────────┘
                              │

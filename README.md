@@ -64,7 +64,7 @@ Odin posts structured reviews with inline comments, severity badges, and fix sug
 | Feature | Details |
 |---|---|
 | **Dataflow triage** | Intra-procedural taint analysis → LLM reasons about exploitability on narrowed candidates only (LLift/INFERROI architecture) |
-| **29 deterministic rules** | Python, JS, TS, Go, Rust, Java — zero cost, instant |
+| **51 deterministic rules** | Python, JS, TS, Go, Rust, Java — 18 are CWE-tagged security rules; zero cost, instant |
 | **Learning feedback loop** | Mark a finding false-positive twice → that (source, sink) pair is suppressed before the LLM runs next time |
 | **Honest leaderboard** | Public FP-rate benchmark on 193 clean samples + CVE recall; every number reproducible, line-localized, contamination-controlled |
 | **uvx one-binary install** | `uvx odin-review review <file>` — works from a clean machine, BYOK |
@@ -277,37 +277,68 @@ Bot commands in PRs: `@odin review` · `@odin help`
 
 ## Deterministic Rules Reference
 
+**51 rules** across 6 languages plus cross-language and performance checks. Zero cost, instant, no LLM. **18 are CWE-tagged security rules** — listed first, since that's what Odin leads with.
+
+### Security rules (18)
+
+| ID | Name | Severity | Language | CWE |
+|---|---|---|---|---|
+| PY003 | Use of `eval()` / `exec()` | CRITICAL | Python | CWE-95 |
+| PY004 | Hardcoded secret / credential | CRITICAL | Python | CWE-798 |
+| PY005 | SQL injection via string formatting | CRITICAL | Python | CWE-89 |
+| PY010 | Unsafe deserialization (pickle / `yaml.load`) | CRITICAL | Python | CWE-502 |
+| PY011 | OS command injection (`shell=True` / `os.system`) | CRITICAL | Python | CWE-78 |
+| PY012 | Insecure PRNG for a security token | MEDIUM | Python | CWE-330 |
+| PY013 | XML External Entity (XXE) injection | HIGH | Python | CWE-611 |
+| PY014 | Server-Side Request Forgery (SSRF) | HIGH | Python | CWE-918 |
+| JS003 | XSS via `innerHTML` / `dangerouslySetInnerHTML` | HIGH | JS/TS | CWE-79 |
+| JS005 | Insecure JWT handling (decode without verify) | HIGH | JS/TS | CWE-347 |
+| JS006 | Prototype pollution | HIGH | JS/TS | CWE-1321 |
+| GO004 | SQL injection via `fmt.Sprintf` | CRITICAL | Go | CWE-89 |
+| RS002 | `unsafe` block usage | HIGH | Rust | CWE-676 |
+| JA005 | SQL injection via string concatenation | CRITICAL | Java | CWE-89 |
+| CL004 | Hardcoded credential | CRITICAL | All | CWE-798 |
+| PERF003 | Weak cryptographic hash (MD5 / SHA-1) | HIGH | All | CWE-327 |
+| PERF004 | Potential path traversal | HIGH | All | CWE-22 |
+| PERF005 | Sensitive data in a log statement | HIGH | All | CWE-532 |
+
+### Quality, style & performance rules (33)
+
 | ID | Name | Severity | Language |
 |---|---|---|---|
 | PY001 | Bare except clause | HIGH | Python |
 | PY002 | Mutable default argument | HIGH | Python |
-| PY003 | eval()/exec() | CRITICAL | Python |
-| PY004 | Hardcoded secret/credential | CRITICAL | Python |
-| PY005 | SQL string formatting | CRITICAL | Python |
 | PY006 | High cyclomatic complexity | MEDIUM | Python |
 | PY007 | Overly long function | MEDIUM | Python |
 | PY008 | Excessive nesting depth | MEDIUM | Python |
-| PY009 | Missing type hints | LOW | Python |
-| JS001 | Use of var | LOW | JS/TS |
-| JS002 | console.log in code | LOW | JS/TS |
-| JS003 | XSS via innerHTML | HIGH | JS/TS |
+| PY009 | Missing type hints on public function | LOW | Python |
+| JS001 | Use of `var` instead of `let`/`const` | LOW | JS/TS |
+| JS002 | `console.log` left in code | LOW | JS/TS |
 | JS004 | Deep callback nesting | MEDIUM | JS/TS |
-| JS005 | JWT decode without verify | HIGH | JS/TS |
-| JS006 | Prototype pollution | HIGH | JS/TS |
+| JS007 | `async` function without `await` | LOW | JS/TS |
 | TS001 | TypeScript `any` type | MEDIUM | TypeScript |
 | TS002 | Non-null assertion overuse | MEDIUM | TypeScript |
 | GO001 | Error return value ignored | HIGH | Go |
-| GO002 | panic() in library code | HIGH | Go |
-| GO003 | Goroutine leak | MEDIUM | Go |
-| GO004 | SQL injection via fmt.Sprintf | CRITICAL | Go |
-| GO005 | Mutex without deferred Unlock | MEDIUM | Go |
-| GO006 | context.Context not first param | LOW | Go |
+| GO002 | `panic()` in non-main code | HIGH | Go |
+| GO003 | Potential goroutine leak | MEDIUM | Go |
+| GO005 | Mutex Lock without deferred Unlock | MEDIUM | Go |
+| GO006 | `context.Context` not first parameter | LOW | Go |
 | GO007 | Hardcoded IP address | LOW | Go |
-| GO008 | Unbuffered channel send deadlock | MEDIUM | Go |
+| GO008 | Unbuffered channel send may deadlock | MEDIUM | Go |
+| RS001 | `unwrap()` — potential panic | MEDIUM | Rust |
+| RS003 | `todo!()` / `unimplemented!()` in production | HIGH | Rust |
+| RS004 | Excessive `.clone()` | LOW | Rust |
+| RS005 | `.expect()` without a descriptive message | LOW | Rust |
+| JA001 | `System.out.println` in production | LOW | Java |
+| JA002 | Raw generic type usage | MEDIUM | Java |
+| JA003 | Resource leak — missing try-with-resources | HIGH | Java |
+| JA004 | Overly broad exception caught | MEDIUM | Java |
+| JA006 | Potential NullPointerException | HIGH | Java |
 | CL001 | TODO/FIXME comment | INFO | All |
 | CL002 | File too large | MEDIUM | All |
 | CL003 | Magic number | LOW | All |
-| CL004 | Hardcoded credential | CRITICAL | All |
+| PERF001 | Regex compiled inside a loop | MEDIUM | All |
+| PERF002 | String concatenation in a loop | MEDIUM | All |
 
 ---
 
@@ -398,7 +429,7 @@ The honest comparison — including where CodeRabbit wins.
 | **CLI (`uvx odin-review review`)** | ✅ no Docker needed | ❌ | ❌ |
 | **PR summary & walkthrough** | ✅ | ✅ | ✅ |
 | **Inline comments** | ✅ | ✅ | ✅ |
-| **Deterministic rules** | ✅ 29 rules, 6 languages | ✅ 40+ | ✅ 40+ |
+| **Deterministic rules** | ✅ 51 rules (18 security), 6 languages | ✅ 40+ | ✅ 40+ |
 | **MCP server** | ✅ Claude Code / Cursor | ❌ | ❌ |
 | **GitLab / Bitbucket** | ❌ (GitHub only) | ✅ | ✅ |
 
