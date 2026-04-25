@@ -7,6 +7,7 @@ Supports two transports:
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +45,7 @@ def _detect_language(file_path: str, hint: str = "python") -> Language:
 
 
 async def _report_progress_safe(
-    ctx: Context | None,
+    ctx: Context[Any, Any] | None,
     progress: int,
     total: int,
     message: str,
@@ -59,18 +60,16 @@ async def _report_progress_safe(
     """
     if ctx is None:
         return
-    try:
+    # Gracefully no-op on stdio transport or clients that don't support progress
+    with contextlib.suppress(Exception):
         await ctx.report_progress(progress=progress, total=total, message=message)
-    except Exception:
-        # Gracefully no-op on stdio transport or clients that don't support progress
-        pass
 
 
 async def _run_review(
     code: str,
     language: Language,
     file_path: str | None = None,
-    ctx: Context | None = None,
+    ctx: Context[Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a code review with optional progress reporting.
 
@@ -100,7 +99,7 @@ async def _run_review(
 
     # Stream graph execution to report progress after each node
     result: dict[str, Any] = {}
-    async for event in review_graph.astream_events(initial_state, version="v1"):  # type: ignore[arg-type]
+    async for event in review_graph.astream_events(initial_state, version="v1"):
         event_type = event.get("event")
         if event_type == "on_chain_end":
             node_name = event.get("name", "")
@@ -151,7 +150,7 @@ async def review_code(
     code: str,
     language: str = "python",
     filename: str | None = None,
-    ctx: Context | None = None,
+    ctx: Context[Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Run a full multi-agent code review on the provided source code.
 
@@ -169,7 +168,7 @@ async def review_code(
 
 
 @mcp.tool()
-async def analyze_file(file_path: str, ctx: Context | None = None) -> dict[str, Any]:
+async def analyze_file(file_path: str, ctx: Context[Any, Any] | None = None) -> dict[str, Any]:
     """Read a file from disk and run a full code review on it.
 
     Args:
@@ -197,7 +196,7 @@ async def get_findings(
     code: str,
     language: str = "python",
     severity: str | None = None,
-    ctx: Context | None = None,
+    ctx: Context[Any, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Run a code review and return findings, optionally filtered by severity.
 
@@ -318,7 +317,7 @@ async def query_codebase(
 async def review_diff(
     files: dict[str, str],
     changed_lines: dict[str, list[list[int]]] | None = None,
-    ctx: Context | None = None,
+    ctx: Context[Any, Any] | None = None,
 ) -> dict[str, Any]:
     """Review a set of changed files and return findings, prioritising diff-local issues.
 
