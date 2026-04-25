@@ -764,7 +764,12 @@ def _run_review(args: argparse.Namespace) -> None:
     min_idx = SEVERITY_ORDER.index(min_severity)
     fail_idx = SEVERITY_ORDER.index(fail_on) if fail_on != "never" else 99
 
-    if not args.quiet:
+    # In machine-readable mode (--json / --sarif) stdout must be *only* the
+    # JSON/SARIF payload — suppress every decorative print and route
+    # diagnostics to stderr.
+    machine_output = bool(getattr(args, "json", False) or getattr(args, "sarif", False))
+
+    if not args.quiet and not machine_output:
         print(f"\n{bold('🔍 Odin Code Review')}\n")
         if getattr(args, "rules_only", False):
             mode = "rules-only"
@@ -789,7 +794,7 @@ def _run_review(args: argparse.Namespace) -> None:
         except Exception:
             continue
 
-        if not args.quiet:
+        if not args.quiet and not machine_output:
             print(bold(str(filepath)))
 
         if getattr(args, "rules_only", False):
@@ -815,10 +820,11 @@ def _run_review(args: argparse.Namespace) -> None:
             findings = [f for f in findings if f.get("confidence", 1.0) >= min_confidence]
 
         if not findings:
-            if not args.quiet:
+            if not args.quiet and not machine_output:
                 print(f"  {green('✓ No issues found')}\n")
         else:
-            print_findings(findings)
+            if not machine_output:
+                print_findings(findings)
             all_findings.extend(findings)
 
         # Collect score for quality gate (only available from full/local review)
@@ -857,7 +863,7 @@ def _run_review(args: argparse.Namespace) -> None:
             src = f.get("source", "unknown")
             sources[src] = sources.get(src, 0) + 1
 
-        if not args.quiet:
+        if not args.quiet and not machine_output:
             print(bold(f"\n{'─' * 50}"))
             header = f"Summary: {len(all_findings)} finding(s) in {len(files)} file(s)"
             if suppressed_count:
@@ -874,12 +880,14 @@ def _run_review(args: argparse.Namespace) -> None:
                 src_parts = [f"{dim(k)}: {v}" for k, v in sorted(sources.items())]
                 print(f"  By source: {', '.join(src_parts)}")
             print(f"{dim('─' * 50)}")
-
-        if args.json:
-            print("\n" + json.dumps(all_findings, indent=2))
     else:
-        if not args.quiet:
+        if not args.quiet and not machine_output:
             print(green("✓ All clear!"))
+
+    # Machine-readable payload: the only thing on stdout in --json mode
+    # (always an array, even when empty). --sarif already returned above.
+    if args.json:
+        print(json.dumps(all_findings, indent=2))
 
     # ---- exit code 1: blocking findings ----
     if fail_on != "never":
@@ -887,7 +895,11 @@ def _run_review(args: argparse.Namespace) -> None:
             f for f in all_findings if SEVERITY_ORDER.index(f.get("severity", "info")) <= fail_idx
         ]
         if blockers:
-            print(f"\n{red(f'✗ {len(blockers)} blocking finding(s) at {fail_on}+ severity')}")
+            out = sys.stderr if machine_output else sys.stdout
+            print(
+                f"\n{red(f'✗ {len(blockers)} blocking finding(s) at {fail_on}+ severity')}",
+                file=out,
+            )
             sys.exit(1)
 
     # ---- exit code 2: quality gate ----
@@ -914,7 +926,8 @@ def _run_review(args: argparse.Namespace) -> None:
         gate_failures.append(f"{high_count} high (max {gate_max_high})")
 
     if gate_failures:
-        print(f"\n{red('✗ Quality gate failed:')} {', '.join(gate_failures)}")
+        out = sys.stderr if machine_output else sys.stdout
+        print(f"\n{red('✗ Quality gate failed:')} {', '.join(gate_failures)}", file=out)
         sys.exit(2)
 
 
