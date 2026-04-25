@@ -411,9 +411,9 @@ class NonNullAssertionRule(Rule):
 
 
 class AsyncWithoutAwaitRule(Rule):
-    """JS005 — async function that never uses await is misleading and adds overhead."""
+    """JS007 — async function that never uses await is misleading and adds overhead."""
 
-    id = "JS005"
+    id = "JS007"
     name = "async function without await"
     severity = Severity.LOW
     category = Category.QUALITY
